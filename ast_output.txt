@@ -1,5 +1,320 @@
 CompUnitNode (Line: 1)
-  MainFuncDefNode (int main) (Line: 1)
-    BlockNode (Line: 1)
-      ReturnStmtNode (Line: 1)
-        NumberNode: 0 (Line: 1)
+  VarDeclNode (Line: 1)
+    BTypeNode: int (Line: 1)
+    VarDefNode: ddddddd (Line: 1)
+      InitVal:
+        InitValNode (Line: 1)
+          NumberNode: 2 (Line: 1)
+  FuncDefNode: nothing (Line: 5)
+    FuncTypeNode: void (Line: 5)
+    BlockNode (Line: 6)
+  FuncDefNode: nothing1 (Line: 10)
+    FuncTypeNode: void (Line: 10)
+    FuncFParamsNode (Line: 10)
+      FuncFParamNode: a (Line: 10)
+        BTypeNode: int (Line: 10)
+    BlockNode (Line: 11)
+      ReturnStmtNode (void) (Line: 12)
+  FuncDefNode: nothing2 (Line: 15)
+    FuncTypeNode: int (Line: 15)
+    FuncFParamsNode (Line: 15)
+      FuncFParamNode: a (Line: 15)
+        BTypeNode: int (Line: 15)
+    BlockNode (Line: 16)
+      ReturnStmtNode (Line: 17)
+        LValNode: a (Line: 17)
+  FuncDefNode: nothing3 (Line: 20)
+    FuncTypeNode: int (Line: 20)
+    FuncFParamsNode (Line: 20)
+      FuncFParamNode: a (Line: 20)
+        BTypeNode: int (Line: 20)
+      FuncFParamNode: b (Line: 20)
+        BTypeNode: int (Line: 20)
+    BlockNode (Line: 21)
+      ReturnStmtNode (Line: 22)
+        LValNode: a (Line: 22)
+  FuncDefNode: nothing4 (Line: 25)
+    FuncTypeNode: int (Line: 25)
+    BlockNode (Line: 26)
+      ReturnStmtNode (Line: 27)
+        NumberNode: 1 (Line: 27)
+  MainFuncDefNode (int main) (Line: 31)
+    BlockNode (Line: 32)
+      VarDeclNode (Line: 33)
+        BTypeNode: int (Line: 33)
+        VarDefNode: arr (Line: 33)
+          Dimension:
+            NumberNode: 10 (Line: 33)
+      VarDeclNode (Line: 34)
+        BTypeNode: int (Line: 34)
+        VarDefNode: brr (Line: 34)
+          Dimension:
+            NumberNode: 3 (Line: 34)
+          InitVal:
+            InitValNode (Aggregate) (Line: 34)
+              InitValNode (Line: 34)
+                NumberNode: 1 (Line: 34)
+              InitValNode (Line: 34)
+                NumberNode: 2 (Line: 34)
+              InitValNode (Line: 34)
+                NumberNode: 3 (Line: 34)
+      VarDeclNode (Line: 35)
+        BTypeNode: int (Line: 35)
+        VarDefNode: a (Line: 35)
+          InitVal:
+            InitValNode (Line: 35)
+              NumberNode: 1 (Line: 35)
+      ConstDeclNode (Line: 36)
+        BTypeNode: int (Line: 36)
+        ConstDefNode: crr (Line: 36)
+          Dimension:
+            NumberNode: 2 (Line: 36)
+          InitVal:
+            ConstInitValNode (Aggregate) (Line: 36)
+              ConstInitValNode (Line: 36)
+                NumberNode: 1 (Line: 36)
+              ConstInitValNode (Line: 36)
+                NumberNode: 2 (Line: 36)
+      ConstDeclNode (Line: 38)
+        BTypeNode: int (Line: 38)
+        ConstDefNode: cccc (Line: 38)
+          InitVal:
+            ConstInitValNode (Line: 38)
+              NumberNode: 1 (Line: 38)
+      ConstDeclNode (Line: 39)
+        BTypeNode: int (Line: 39)
+        ConstDefNode: dddd (Line: 39)
+          InitVal:
+            ConstInitValNode (Line: 39)
+              NumberNode: 2 (Line: 39)
+      ConstDeclNode (Line: 40)
+        BTypeNode: int (Line: 40)
+        ConstDefNode: eeee (Line: 40)
+          InitVal:
+            ConstInitValNode (Line: 40)
+              NumberNode: 2 (Line: 40)
+        ConstDefNode: ffff (Line: 40)
+          InitVal:
+            ConstInitValNode (Line: 40)
+              NumberNode: 3 (Line: 40)
+      VarDeclNode (Line: 43)
+        BTypeNode: int (Line: 43)
+        VarDefNode: nn1 (Line: 43)
+        VarDefNode: nn2 (Line: 43)
+        VarDefNode: nn3 (Line: 43)
+      VarDeclNode (Line: 44)
+        BTypeNode: int (Line: 44)
+        VarDefNode: dd1 (Line: 44)
+          InitVal:
+            InitValNode (Line: 44)
+              NumberNode: 2 (Line: 44)
+        VarDefNode: dd3 (Line: 44)
+          InitVal:
+            InitValNode (Line: 44)
+              NumberNode: 2 (Line: 44)
+        VarDefNode: dd2 (Line: 44)
+          InitVal:
+            InitValNode (Line: 44)
+              NumberNode: 2 (Line: 44)
+      AssignStmtNode (Line: 46)
+        LVal:
+          LValNode: arr (Line: 46)
+            Index:
+              NumberNode: 0 (Line: 46)
+        RHS:
+          NumberNode: 1 (Line: 46)
+      VarDeclNode (Line: 48)
+        BTypeNode: int (Line: 48)
+        VarDefNode: c (Line: 48)
+          InitVal:
+            InitValNode (Line: 48)
+              BinaryExpNode: Op=- (Line: 48)
+                Left:
+                  BinaryExpNode: Op=+ (Line: 48)
+                    Left:
+                      BinaryExpNode: Op=+ (Line: 48)
+                        Left:
+                          NumberNode: 1 (Line: 48)
+                        Right:
+                          NumberNode: 2 (Line: 48)
+                    Right:
+                      BinaryExpNode: Op=* (Line: 48)
+                        Left:
+                          NumberNode: 3 (Line: 48)
+                        Right:
+                          NumberNode: 2 (Line: 48)
+                Right:
+                  BinaryExpNode: Op=/ (Line: 48)
+                    Left:
+                      BinaryExpNode: Op=% (Line: 48)
+                        Left:
+                          NumberNode: 2 (Line: 48)
+                        Right:
+                          NumberNode: 1 (Line: 48)
+                    Right:
+                      NumberNode: 2 (Line: 48)
+      VarDeclNode (Line: 50)
+        BTypeNode: int (Line: 50)
+        VarDefNode: d22 (Line: 50)
+          InitVal:
+            InitValNode (Line: 50)
+              NumberNode: 2 (Line: 50)
+      AssignStmtNode (Line: 52)
+        LVal:
+          LValNode: d22 (Line: 52)
+        RHS:
+          BinaryExpNode: Op=- (Line: 52)
+            Left:
+              LValNode: c (Line: 52)
+            Right:
+              LValNode: a (Line: 52)
+      AssignStmtNode (Line: 53)
+        LVal:
+          LValNode: c (Line: 53)
+        RHS:
+          LValNode: a (Line: 53)
+      AssignStmtNode (Line: 55)
+        LVal:
+          LValNode: c (Line: 55)
+        RHS:
+          UnaryExpNode: Op=- (Line: 55)
+            Operand:
+              LValNode: a (Line: 55)
+      AssignStmtNode (Line: 56)
+        LVal:
+          LValNode: c (Line: 56)
+        RHS:
+          UnaryExpNode: Op=+ (Line: 56)
+            Operand:
+              LValNode: c (Line: 56)
+      AssignStmtNode (Line: 59)
+        LVal:
+          LValNode: arr (Line: 59)
+            Index:
+              NumberNode: 2 (Line: 59)
+        RHS:
+          LValNode: a (Line: 59)
+      ExpStmtNode (Line: 61)
+        FuncCallNode: nothing1 (Line: 61)
+          Arg 1:
+            LValNode: a (Line: 61)
+      AssignStmtNode (Line: 62)
+        LVal:
+          LValNode: c (Line: 62)
+        RHS:
+          FuncCallNode: nothing3 (Line: 62)
+            Arg 1:
+              LValNode: a (Line: 62)
+            Arg 2:
+              LValNode: a (Line: 62)
+      AssignStmtNode (Line: 63)
+        LVal:
+          LValNode: c (Line: 63)
+        RHS:
+          BinaryExpNode: Op=+ (Line: 63)
+            Left:
+              FuncCallNode: nothing3 (Line: 63)
+                Arg 1:
+                  LValNode: a (Line: 63)
+                Arg 2:
+                  LValNode: a (Line: 63)
+            Right:
+              NumberNode: 2 (Line: 63)
+      AssignStmtNode (Line: 64)
+        LVal:
+          LValNode: c (Line: 64)
+        RHS:
+          FuncCallNode: nothing4 (Line: 64)
+      VarDeclNode (Line: 68)
+        BTypeNode: int (Line: 68)
+        VarDefNode: d (Line: 68)
+      AssignStmtNode (getint) (Line: 69)
+        LVal:
+          LValNode: d (Line: 69)
+      PrintfStmtNode (Line: 71)
+        FormatStringNode: "2023202312\n" (Line: 71)
+      WhileStmtNode (Line: 72)
+        Condition:
+          BinaryExpNode: Op=|| (Line: 72)
+            Left:
+              BinaryExpNode: Op=> (Line: 72)
+                Left:
+                  NumberNode: 1 (Line: 72)
+                Right:
+                  NumberNode: 2 (Line: 72)
+            Right:
+              BinaryExpNode: Op=&& (Line: 72)
+                Left:
+                  BinaryExpNode: Op=&& (Line: 72)
+                    Left:
+                      BinaryExpNode: Op=&& (Line: 72)
+                        Left:
+                          BinaryExpNode: Op=&& (Line: 72)
+                            Left:
+                              BinaryExpNode: Op=&& (Line: 72)
+                                Left:
+                                  BinaryExpNode: Op=< (Line: 72)
+                                    Left:
+                                      NumberNode: 2 (Line: 72)
+                                    Right:
+                                      NumberNode: 1 (Line: 72)
+                                Right:
+                                  BinaryExpNode: Op=<= (Line: 72)
+                                    Left:
+                                      NumberNode: 2 (Line: 72)
+                                    Right:
+                                      NumberNode: 1 (Line: 72)
+                            Right:
+                              BinaryExpNode: Op=>= (Line: 72)
+                                Left:
+                                  NumberNode: 3 (Line: 72)
+                                Right:
+                                  NumberNode: 4 (Line: 72)
+                        Right:
+                          BinaryExpNode: Op=== (Line: 72)
+                            Left:
+                              NumberNode: 3 (Line: 72)
+                            Right:
+                              NumberNode: 8 (Line: 72)
+                    Right:
+                      UnaryExpNode: Op=! (Line: 72)
+                        Operand:
+                          NumberNode: 1 (Line: 72)
+                Right:
+                  BinaryExpNode: Op=!= (Line: 72)
+                    Left:
+                      NumberNode: 2 (Line: 72)
+                    Right:
+                      NumberNode: 2 (Line: 72)
+        Body:
+          BlockNode (Line: 73)
+            IfStmtNode (Line: 74)
+              Condition:
+                BinaryExpNode: Op=> (Line: 74)
+                  Left:
+                    NumberNode: 10 (Line: 74)
+                  Right:
+                    NumberNode: 100 (Line: 74)
+              Then:
+                BlockNode (Line: 75)
+                  PrintfStmtNode (Line: 76)
+                    FormatStringNode: "This is impossible." (Line: 76)
+                  ContinueStmtNode (Line: 77)
+              Else:
+                BlockNode (Line: 78)
+                  BreakStmtNode (Line: 80)
+            IfStmtNode (Line: 83)
+              Condition:
+                BinaryExpNode: Op=> (Line: 83)
+                  Left:
+                    NumberNode: 1 (Line: 83)
+                  Right:
+                    NumberNode: 2 (Line: 83)
+              Then:
+                ExpStmtNode (Empty) (Line: 83)
+      PrintfStmtNode (Line: 86)
+        FormatStringNode: "%d" (Line: 86)
+        Arg 1:
+          LValNode: a (Line: 86)
+      ReturnStmtNode (Line: 88)
+        NumberNode: 0 (Line: 88)

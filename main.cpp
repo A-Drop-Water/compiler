@@ -6,9 +6,22 @@
 #include <iostream>
 #include <string>
 #include <vector> // For std::vector<Token>
+#include <sstream>
+
+std::string readFromFile(const std::string &filename)
+{
+  std::ifstream file(filename);
+  if (!file.is_open())
+  {
+    throw std::runtime_error("Failed to open file: " + filename);
+  }
+  std::stringstream buffer;
+  buffer << file.rdbuf(); // 将文件内容读入字符串流
+  return buffer.str();
+}
 
 int main() {
-    std::string sourceCode = "int main() { return 0; }"; // Your source code
+    std::string sourceCode = readFromFile("testfile.txt"); // Your source code
     Lexer lexer(sourceCode);
     std::vector<Token> tokens = lexer.tokenize();
 
