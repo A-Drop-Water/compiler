@@ -1,794 +1,660 @@
 #include "parser.h"
-#include <iostream>
+#include "ast.h"
+#include <iostream> // For std::cerr (though errors are thrown)
 
 // 构造函数实现
 Parser::Parser(const std::vector<Token>& tokens, std::ofstream& out) 
     : tokens(tokens), outFile(out), currentPos(0) {
+    if (tokens.empty()) {
+        // Handle empty token list if necessary, perhaps by throwing
+        // or ensuring parse() returns nullptr or an empty CompUnitNode.
+        // For now, assume it won't be called with empty tokens or parse() handles it.
+    }
 }
 
-// 获取当前token
-Token& Parser::getCurrentToken() {
+// 获取当前token (const version)
+const Token& Parser::getCurrentToken() const {
     if (currentPos >= tokens.size()) {
-        throw std::runtime_error("Token索引超出边界");
+        // This indicates an unexpected end of input, usually a bug in parser logic
+        // or an incomplete source file that wasn't caught by an EOF token.
+        // A special EOF token at the end of the token list can help manage this.
+        // For now, throw. A more graceful recovery might be needed in a full compiler.
+        throw std::runtime_error("Unexpected end of token stream. Current position: " + 
+                                 std::to_string(currentPos) + ", Total tokens: " + std::to_string(tokens.size()));
     }
     return tokens[currentPos];
 }
 
+size_t Parser::getCurrentLine() const {
+    if (currentPos < tokens.size()) {
+        return tokens[currentPos].line;
+    }
+    if (!tokens.empty()) {
+        return tokens.back().line; // Best guess: line of the last token
+    }
+    return 0; // No tokens
+}
+
+
 // 检查当前token的类型
-bool Parser::check(TokenType type) {
-    return currentPos < tokens.size() && getCurrentToken().type == type;
+bool Parser::check(TokenType type) const {
+    return currentPos < tokens.size() && tokens[currentPos].type == type;
 }
 
 // 消耗一个token并前进
-void Parser::consume() {
-    // 打印当前token信息
-    const auto& token = getCurrentToken();
-    printAns(token.type);
-    outFile << " " << token.value << std::endl;
-    
-    currentPos++;
+Token Parser::consume() {
+    if (currentPos >= tokens.size()) {
+         throw std::runtime_error("Consume called beyond token stream.");
+    }
+    // No longer prints token here, AST nodes will carry the info.
+    return tokens[currentPos++];
 }
 
-// 消耗指定类型的token
-bool Parser::consume(TokenType type) {
-    if (check(type)) {
-        consume();
-        return true;
+// 消耗指定类型的token，不匹配则抛出异常
+Token Parser::consume(TokenType type, const std::string& errorMessage) {
+    if (!check(type)) {
+        throw std::runtime_error(errorMessage + " (Line: " + std::to_string(getCurrentLine()) + 
+                                 "). Got " + tokens[currentPos].value + " instead.");
     }
-    return false;
+    return consume();
 }
 
 // 预览下一个token
-bool Parser::lookAhead(TokenType type, int offset) {
+bool Parser::lookAhead(TokenType type, int offset) const {
     return (currentPos + offset) < tokens.size() && tokens[currentPos + offset].type == type;
 }
 
-// 输出语法单元名称
-void Parser::printSyntaxUnit(const std::string& name) {
-    outFile << "<" << name << ">" << std::endl;
+// --- Main Parse Method ---
+std::unique_ptr<CompUnitNode> Parser::parse() {
+    auto compUnit = parseCompUnit();
+    if (currentPos < tokens.size()) {
+        // This means not all tokens were consumed, which could be a syntax error
+        // or an issue with the grammar / parser logic for the top level.
+        // std::cerr << "Warning: Not all tokens consumed. Remaining token: "
+        //           << tokens[currentPos].value << " at line " << tokens[currentPos].line << std::endl;
+        // Depending on strictness, this could be an error.
+        // For now, we assume parseCompUnit should consume everything if the input is valid.
+         throw std::runtime_error("Extra tokens found after parsing CompUnit, starting with '" +
+                                 tokens[currentPos].value + "' at line " + std::to_string(tokens[currentPos].line));
+    }
+    return compUnit;
 }
 
-// 输出Token的类型
-void Parser::printAns(TokenType type) {
-    // 此处实现根据TokenType输出对应的字符串
-    switch (type)
-  {
-  case TokenType::EQL:
-    outFile << "EQL";
-    break;
-  case TokenType::ASSIGN:
-    outFile << "ASSIGN";
-    break;
-  case TokenType::IDENFR:
-    outFile << "IDENFR";
-    break;
-  case TokenType::INTCON:
-    outFile << "INTCON";
-    break;
-  case TokenType::STRCON:
-    outFile << "STRCON";
-    break;
-  case TokenType::MAINTK:
-    outFile << "MAINTK";
-    break;
-  case TokenType::CONSTTK:
-    outFile << "CONSTTK";
-    break;
-  case TokenType::IFTK:
-    outFile << "IFTK";
-    break;
-  case TokenType::ELSETK:
-    outFile << "ELSETK";
-    break;
-  case TokenType::CONTINUETK:
-    outFile << "CONTINUETK";
-    break;
-  case TokenType::BREAKTK:
-    outFile << "BREAKTK";
-    break;
-  case TokenType::INTTK:
-    outFile << "INTTK";
-    break;
-  case TokenType::WHILETK:
-    outFile << "WHILETK";
-    break;
-  case TokenType::RETURNTK:
-    outFile << "RETURNTK";
-    break;
-  case TokenType::VOIDTK:
-    outFile << "VOIDTK";
-    break;
-  case TokenType::GETINTTK:
-    outFile << "GETINTTK";
-    break;
-  case TokenType::PRINTFTK:
-    outFile << "PRINTFTK";
-    break;
-  case TokenType::NOT:
-    outFile << "NOT";
-    break;
-  case TokenType::SEMICN:
-    outFile << "SEMICN";
-    break;
-  case TokenType::COMMA:
-    outFile << "COMMA";
-    break;
-  case TokenType::LBRACE:
-    outFile << "LBRACE";
-    break;
-  case TokenType::RBRACE:
-    outFile << "RBRACE";
-    break;
-  case TokenType::LBRACK:
-    outFile << "LBRACK";
-    break;
-  case TokenType::RBRACK:
-    outFile << "RBRACK";
-    break;
-  case TokenType::LPARENT:
-    outFile << "LPARENT";
-    break;
-  case TokenType::RPARENT:
-    outFile << "RPARENT";
-    break;
-  case TokenType::MINU:
-    outFile << "MINU";
-    break;
-  case TokenType::PLUS:
-    outFile << "PLUS";
-    break;
-  case TokenType::MULT:
-    outFile << "MULT";
-    break;
-  case TokenType::DIV:
-    outFile << "DIV";
-    break;
-  case TokenType::MOD:
-    outFile << "MOD";
-    break;
-  case TokenType::AND:
-    outFile << "AND";
-    break;
-  case TokenType::OR:
-    outFile << "OR";
-    break;
-  case TokenType::NEQ:
-    outFile << "NEQ";
-    break;
-  case TokenType::LSS:
-    outFile << "LSS";
-    break;
-  case TokenType::LEQ:
-    outFile << "LEQ";
-    break;
-  case TokenType::GEQ:
-    outFile << "GEQ";
-    break;
-  case TokenType::GRE:
-    outFile << "GRE";
-    break;
+// --- AST Node Parsing Methods Implementation ---
 
-  default:
-    outFile << "UNKNOWN";
-  }
-}
+// CompUnit ::= {Decl | FuncDef} MainFuncDef
+std::unique_ptr<CompUnitNode> Parser::parseCompUnit() {
+    auto compUnitNode = std::make_unique<CompUnitNode>(getCurrentLine());
 
-
-
-// 执行语法分析
-void Parser::parse() {
-    parseCompUnit();
-}
-
-// 解析编译单元
-void Parser::parseCompUnit() {
-    // 解析声明和函数定义，直到遇到main函数
-    while (currentPos < tokens.size())
-    {
-        // 检查可能的结束条件，避免死循环
-        size_t startPos = currentPos;
-        
-        // 处理常量声明
-        if (check(TokenType::CONSTTK)) {
-            parseConstDecl();
-        }
-        // 处理变量声明或函数定义
-        else if (check(TokenType::INTTK) || check(TokenType::VOIDTK)) {
-            if (check(TokenType::VOIDTK)) {
-                // void只能是函数定义
-                parseFuncDef();
+    while (currentPos < tokens.size()) {
+        if (check(TokenType::CONSTTK)) { // Start of ConstDecl
+            compUnitNode->globalDefinitions.push_back(parseConstDecl());
+        } else if (check(TokenType::INTTK) || check(TokenType::VOIDTK)) {
+            // Need to distinguish VarDecl, FuncDef, MainFuncDef
+            if (check(TokenType::INTTK) && lookAhead(TokenType::MAINTK)) {
+                break; // Found main, stop parsing global decls/defs
             }
-            else if (currentPos + 1 < tokens.size()) {
-                // 检查是否是main函数
-                if (tokens[currentPos + 1].type == TokenType::MAINTK) {
-                    break; // 遇到main函数，结束全局定义解析
-                }
-                // 检查是否是普通函数定义
-                else if (currentPos + 2 < tokens.size() && 
-                            tokens[currentPos + 1].type == TokenType::IDENFR && 
-                            tokens[currentPos + 2].type == TokenType::LPARENT) {
-                    parseFuncDef();
-                }
-                // 变量声明
-                else {
-                    parseVarDecl();
-                }
+            // Check for FuncDef: FuncType Ident '('
+            // VarDecl: BType Ident (';' or '[' or '=')
+            // A common way to distinguish is to look further, e.g., for '('.
+            // If BType Ident '(', it's a FuncDef. Otherwise, VarDecl.
+            // (Assuming BType is 'int' for VarDecl)
+            if (lookAhead(TokenType::IDENFR, 1) && lookAhead(TokenType::LPARENT, 2)) {
+                 compUnitNode->globalDefinitions.push_back(parseFuncDef());
+            } else if (check(TokenType::INTTK)) { // Must be VarDecl if not FuncDef or Main
+                 compUnitNode->globalDefinitions.push_back(parseVarDecl());
+            } else if (check(TokenType::VOIDTK)) { // Must be FuncDef
+                 compUnitNode->globalDefinitions.push_back(parseFuncDef());
             }
-            else {
-                // 无法确定，跳出循环避免死循环
-                break;
+             else {
+                throw std::runtime_error("Expected declaration, function definition, or main function at line " + std::to_string(getCurrentLine()));
             }
-        }
-        else {
-            // 无法解析的内容，跳出循环
-            break;
-        }
-        
-        // 检查是否取得进展，防止死循环
-        if (currentPos == startPos) {
-            break;
+        } else {
+            break; // No more global declarations or function definitions
         }
     }
-    
-    // 解析main函数
-    if (currentPos < tokens.size() && check(TokenType::INTTK) && 
-        currentPos + 1 < tokens.size() && tokens[currentPos + 1].type == TokenType::MAINTK) {
-        parseMainFuncDef();
-    }
-    
-    printSyntaxUnit("CompUnit");
+
+    compUnitNode->mainFunc = parseMainFuncDef();
+    return compUnitNode;
 }
 
-// 解析函数定义
-void Parser::parseFuncDef() {
-    parseFuncType();
-    consume(TokenType::IDENFR);
-    consume(TokenType::LPARENT);
-    
-    // 可选的函数参数
+// FuncDef ::= FuncType Ident '(' [FuncFParams] ')' Block
+std::unique_ptr<FuncDefNode> Parser::parseFuncDef() {
+    auto funcType = parseFuncType();
+    Token funcNameToken = consume(TokenType::IDENFR, "Expected function name");
+    consume(TokenType::LPARENT, "Expected '(' after function name");
+
+    std::unique_ptr<FuncFParamsNode> paramsNode = nullptr;
     if (!check(TokenType::RPARENT)) {
-        parseFuncFParams();
+        paramsNode = parseFuncFParams();
     }
+    consume(TokenType::RPARENT, "Expected ')' after function parameters");
     
-    consume(TokenType::RPARENT);
-    parseBlock();
-    printSyntaxUnit("FuncDef");
+    auto body = parseBlock();
+    
+    return std::make_unique<FuncDefNode>(std::move(funcType), funcNameToken, std::move(paramsNode), std::move(body));
 }
 
-// 解析函数类型
-void Parser::parseFuncType() {
-    if (check(TokenType::VOIDTK) || check(TokenType::INTTK)) {
-        consume();
+// FuncType ::= 'void' | 'int'
+std::unique_ptr<FuncTypeNode> Parser::parseFuncType() {
+    Token typeToken = consume(); // Consumes 'void' or 'int'
+    if (typeToken.type != TokenType::VOIDTK && typeToken.type != TokenType::INTTK) {
+        throw std::runtime_error("Expected 'void' or 'int' for function type at line " + std::to_string(typeToken.line));
     }
-    printSyntaxUnit("FuncType");
+    return std::make_unique<FuncTypeNode>(typeToken);
 }
 
-// 解析函数形式参数列表
-void Parser::parseFuncFParams() {
-    parseFuncFParam();
-    
+// FuncFParams ::= FuncFParam {',' FuncFParam}
+std::unique_ptr<FuncFParamsNode> Parser::parseFuncFParams() {
+    auto paramsNode = std::make_unique<FuncFParamsNode>(getCurrentLine());
+    paramsNode->params.push_back(parseFuncFParam());
     while (check(TokenType::COMMA)) {
-        consume();
-        parseFuncFParam();
+        consume(); // ','
+        paramsNode->params.push_back(parseFuncFParam());
     }
-    
-    printSyntaxUnit("FuncFParams");
+    return paramsNode;
 }
 
-// 解析函数形式参数
-void Parser::parseFuncFParam() {
-    parseBType();
-    consume(TokenType::IDENFR);
+// FuncFParam ::= BType Ident ['[' ']' {'[' ConstExp ']'}]
+// PDF says: "只包含普通变量" (Only plain variables)
+// My AST node for FuncFParam is simplified based on PDF.
+// If full array params are needed, this parser and AST node need changes.
+std::unique_ptr<FuncFParamNode> Parser::parseFuncFParam() {
+    auto bType = parseBType();
+    Token nameToken = consume(TokenType::IDENFR, "Expected parameter name");
     
-    // 处理数组参数
+    auto paramNode = std::make_unique<FuncFParamNode>(std::move(bType), nameToken);
+
+    // Handling array parameters as per the EBNF in parser.h (more complex than PDF's note)
+    // The PDF note "只包含普通变量" simplifies this. If we follow the EBNF strictly:
     if (check(TokenType::LBRACK)) {
-        consume();
-        consume(TokenType::RBRACK);
+        paramNode->isArray = true;
+        consume(TokenType::LBRACK, "Expected '[' for array parameter");
+        consume(TokenType::RBRACK, "Expected ']' for array parameter"); // First '[]' is empty
         
-        // 处理多维数组
-        while (check(TokenType::LBRACK)) {
-            consume();
-            parseConstExp();
-            consume(TokenType::RBRACK);
+        while(check(TokenType::LBRACK)) {
+            consume(TokenType::LBRACK, "Expected '[' for array parameter dimension");
+            paramNode->arrayPointerDimensions.push_back(parseConstExp());
+            consume(TokenType::RBRACK, "Expected ']' after array parameter dimension");
         }
     }
-    
-    printSyntaxUnit("FuncFParam");
+    return paramNode;
 }
 
-// 解析main函数定义
-void Parser::parseMainFuncDef() {
-    // 分析 'int' 'main' '(' ')'
-    consume(TokenType::INTTK);
-    consume(TokenType::MAINTK);
-    consume(TokenType::LPARENT);
-    consume(TokenType::RPARENT);
-    parseBlock();
-    printSyntaxUnit("MainFuncDef");
+
+// MainFuncDef ::= 'int' 'main' '(' ')' Block
+std::unique_ptr<MainFuncDefNode> Parser::parseMainFuncDef() {
+    size_t line = getCurrentLine();
+    consume(TokenType::INTTK, "Expected 'int' for main function");
+    consume(TokenType::MAINTK, "Expected 'main' keyword");
+    consume(TokenType::LPARENT, "Expected '(' after 'main'");
+    consume(TokenType::RPARENT, "Expected ')' after 'main()'");
+    auto body = parseBlock();
+    return std::make_unique<MainFuncDefNode>(std::move(body), line);
 }
 
-// 解析代码块
-void Parser::parseBlock() {
-    consume(TokenType::LBRACE);
-    
-    // 解析块中的所有项
-    while (currentPos < tokens.size() && !check(TokenType::RBRACE)) {
-        parseBlockItem();
+// Block ::= '{' {BlockItem} '}'
+std::unique_ptr<BlockNode> Parser::parseBlock() {
+    Token lbrace = consume(TokenType::LBRACE, "Expected '{' to start a block");
+    auto blockNode = std::make_unique<BlockNode>(lbrace.line);
+    while (!check(TokenType::RBRACE) && currentPos < tokens.size()) {
+        blockNode->items.push_back(parseBlockItem());
     }
-    
-    consume(TokenType::RBRACE);
-    printSyntaxUnit("Block");
+    consume(TokenType::RBRACE, "Expected '}' to end a block");
+    return blockNode;
 }
 
-// 解析块中的项
-void Parser::parseBlockItem() {
-    if (check(TokenType::CONSTTK) || (check(TokenType::INTTK) && !lookAhead(TokenType::MAINTK))) {
-        parseDecl();
+// BlockItem ::= Decl | Stmt
+std::unique_ptr<BlockItemNode> Parser::parseBlockItem() {
+    // Decl starts with 'const' or 'int' (BType)
+    if (check(TokenType::CONSTTK) || check(TokenType::INTTK)) {
+        // Need to ensure 'int' is not part of 'int main()' if parsing was less strict before.
+        // Here, we are inside a block, so 'int' should be a VarDecl.
+        return parseDecl();
     } else {
-        parseStmt();
+        // Statements need to be wrapped as BlockItemNode
+        auto stmt = parseStmt();
+        // 创建一个包装StmtNode的BlockItemNode
+        class StmtBlockItemNode : public BlockItemNode {
+        private:
+            std::unique_ptr<StmtNode> stmt;
+        public:
+            StmtBlockItemNode(std::unique_ptr<StmtNode> s) : BlockItemNode(s->lineNumber), stmt(std::move(s)) {}
+            void print(std::ostream& out, int indent) const override {
+                stmt->print(out, indent);
+            }
+        };
+        return std::make_unique<StmtBlockItemNode>(std::move(stmt));
     }
-    // 这里不输出 BlockItem
 }
 
-// 解析声明
-void Parser::parseDecl() {
+// Decl ::= ConstDecl | VarDecl
+std::unique_ptr<DeclNode> Parser::parseDecl() {
     if (check(TokenType::CONSTTK)) {
-        parseConstDecl();
+        return parseConstDecl();
+    } else if (check(TokenType::INTTK)) {
+        return parseVarDecl();
     } else {
-        parseVarDecl();
+        throw std::runtime_error("Expected 'const' or 'int' for declaration at line " + std::to_string(getCurrentLine()));
     }
-    // 不输出 Decl
 }
 
-// 解析常量声明
-void Parser::parseConstDecl() {
-    consume(TokenType::CONSTTK);
-    parseBType();
-    parseConstDef();
+// ConstDecl ::= 'const' BType ConstDef {',' ConstDef} ';'
+std::unique_ptr<ConstDeclNode> Parser::parseConstDecl() {
+    Token constToken = consume(TokenType::CONSTTK, "Expected 'const' keyword");
+    auto bType = parseBType();
+    auto constDeclNode = std::make_unique<ConstDeclNode>(std::move(bType), constToken.line);
     
+    constDeclNode->constDefs.push_back(parseConstDef());
     while (check(TokenType::COMMA)) {
-        consume();
-        parseConstDef();
+        consume(); // ','
+        constDeclNode->constDefs.push_back(parseConstDef());
     }
-    
-    consume(TokenType::SEMICN);
-    printSyntaxUnit("ConstDecl");
+    consume(TokenType::SEMICN, "Expected ';' after const declaration");
+    return constDeclNode;
 }
 
-// 解析基本类型
-void Parser::parseBType() {
-    consume(TokenType::INTTK);
-    // 不输出 BType
+// BType ::= 'int'
+std::unique_ptr<BTypeNode> Parser::parseBType() {
+    Token typeToken = consume(TokenType::INTTK, "Expected 'int' type specifier");
+    return std::make_unique<BTypeNode>(typeToken.line);
 }
 
-// 解析常量定义
-void Parser::parseConstDef() {
-    consume(TokenType::IDENFR);
-    
+// ConstDef ::= Ident ['[' ConstExp ']'] '=' ConstInitVal
+std::unique_ptr<ConstDefNode> Parser::parseConstDef() {
+    Token idToken = consume(TokenType::IDENFR, "Expected identifier in const definition");
+    auto constDefNode = std::make_unique<ConstDefNode>(idToken);
+
     while (check(TokenType::LBRACK)) {
-        consume();
-        parseConstExp();
-        consume(TokenType::RBRACK);
+        consume(); // '['
+        constDefNode->arrayDimensions.push_back(parseConstExp());
+        consume(TokenType::RBRACK, "Expected ']' after array dimension in const definition");
     }
-    
-    consume(TokenType::ASSIGN);
-    parseConstInitVal();
-    printSyntaxUnit("ConstDef");
+    consume(TokenType::ASSIGN, "Expected '=' in const definition");
+    constDefNode->initVal = parseConstInitVal();
+    return constDefNode;
 }
 
-// 解析常量初始值
-void Parser::parseConstInitVal() {
+// ConstInitVal ::= ConstExp | '{' [ConstInitVal {',' ConstInitVal}] '}'
+std::unique_ptr<ConstInitValNode> Parser::parseConstInitVal() {
+    size_t line = getCurrentLine();
     if (check(TokenType::LBRACE)) {
-        consume();
-        
+        consume(); // '{'
+        std::vector<std::unique_ptr<ConstInitValNode>> aggValues;
         if (!check(TokenType::RBRACE)) {
-            parseConstInitVal();
-            
+            aggValues.push_back(parseConstInitVal());
             while (check(TokenType::COMMA)) {
-                consume();
-                parseConstInitVal();
+                consume(); // ','
+                aggValues.push_back(parseConstInitVal());
             }
         }
-        
-        consume(TokenType::RBRACE);
+        consume(TokenType::RBRACE, "Expected '}' for aggregate const initializer");
+        return std::make_unique<ConstInitValNode>(std::move(aggValues), line);
     } else {
-        parseConstExp();
+        return std::make_unique<ConstInitValNode>(parseConstExp(), line);
     }
-    
-    printSyntaxUnit("ConstInitVal");
 }
 
-// 解析变量声明
-void Parser::parseVarDecl() {
-    parseBType();
-    parseVarDef();
-    
+// VarDecl ::= BType VarDef {',' VarDef} ';'
+std::unique_ptr<VarDeclNode> Parser::parseVarDecl() {
+    auto bType = parseBType();
+    size_t line = bType->lineNumber; // Line of 'int'
+    auto varDeclNode = std::make_unique<VarDeclNode>(std::move(bType), line);
+
+    varDeclNode->varDefs.push_back(parseVarDef());
     while (check(TokenType::COMMA)) {
-        consume();
-        parseVarDef();
+        consume(); // ','
+        varDeclNode->varDefs.push_back(parseVarDef());
     }
-    
-    consume(TokenType::SEMICN);
-    printSyntaxUnit("VarDecl");
+    consume(TokenType::SEMICN, "Expected ';' after variable declaration");
+    return varDeclNode;
 }
 
-// 解析变量定义
-void Parser::parseVarDef() {
-    consume(TokenType::IDENFR);
-    
+// VarDef ::= Ident ['[' ConstExp ']'] ['=' InitVal]
+std::unique_ptr<VarDefNode> Parser::parseVarDef() {
+    Token idToken = consume(TokenType::IDENFR, "Expected identifier in variable definition");
+    auto varDefNode = std::make_unique<VarDefNode>(idToken);
+
     while (check(TokenType::LBRACK)) {
-        consume();
-        parseConstExp();
-        consume(TokenType::RBRACK);
+        consume(); // '['
+        varDefNode->arrayDimensions.push_back(parseConstExp());
+        consume(TokenType::RBRACK, "Expected ']' after array dimension");
     }
-    
+
     if (check(TokenType::ASSIGN)) {
-        consume();
-        parseInitVal();
+        consume(); // '='
+        varDefNode->initVal = parseInitVal();
     }
-    
-    printSyntaxUnit("VarDef");
+    return varDefNode;
 }
 
-// 解析变量初始值
-void Parser::parseInitVal() {
+// InitVal ::= Exp | '{' [InitVal {',' InitVal}] '}'
+std::unique_ptr<InitValNode> Parser::parseInitVal() {
+    size_t line = getCurrentLine();
     if (check(TokenType::LBRACE)) {
-        consume();
-        
+        consume(); // '{'
+        std::vector<std::unique_ptr<InitValNode>> aggValues;
         if (!check(TokenType::RBRACE)) {
-            parseInitVal();
-            
+            aggValues.push_back(parseInitVal());
             while (check(TokenType::COMMA)) {
-                consume();
-                parseInitVal();
+                consume(); // ','
+                aggValues.push_back(parseInitVal());
             }
         }
-        
-        consume(TokenType::RBRACE);
+        consume(TokenType::RBRACE, "Expected '}' for aggregate initializer");
+        if (aggValues.empty()) return std::make_unique<InitValNode>(line); // Empty {}
+        return std::make_unique<InitValNode>(std::move(aggValues), line);
     } else {
-        parseExp();
+        return std::make_unique<InitValNode>(parseExp(), line);
     }
-    
-    printSyntaxUnit("InitVal");
 }
 
-// 解析语句
-void Parser::parseStmt() {
-    // 记录当前位置，避免回溯导致的问题
-    size_t startPos = currentPos;
-    
+// Stmt ::= LVal '=' Exp ';' | LVal '=' 'getint''('')'';'
+//        | [Exp] ';' | Block
+//        | 'if' '(' Cond ')' Stmt [ 'else' Stmt ]
+//        | 'while' '(' Cond ')' Stmt
+//        | 'break' ';' | 'continue' ';'
+//        | 'return' [Exp] ';'
+//        | 'printf' '(' FormatString {',' Exp} ')' ';'
+std::unique_ptr<StmtNode> Parser::parseStmt() {
+    size_t line = getCurrentLine();
     if (check(TokenType::IFTK)) {
-        parseIfStmt();
+        return parseIfStmt();
     } else if (check(TokenType::WHILETK)) {
-        parseWhileStmt();
+        return parseWhileStmt();
     } else if (check(TokenType::BREAKTK)) {
-        consume();
-        consume(TokenType::SEMICN);
-        printSyntaxUnit("Stmt");
+        Token breakToken = consume(); // 'break'
+        consume(TokenType::SEMICN, "Expected ';' after 'break'");
+        return std::make_unique<BreakStmtNode>(breakToken.line);
     } else if (check(TokenType::CONTINUETK)) {
-        consume();
-        consume(TokenType::SEMICN);
-        printSyntaxUnit("Stmt");
+        Token continueToken = consume(); // 'continue'
+        consume(TokenType::SEMICN, "Expected ';' after 'continue'");
+        return std::make_unique<ContinueStmtNode>(continueToken.line);
     } else if (check(TokenType::RETURNTK)) {
-        consume();
+        Token returnToken = consume(); // 'return'
+        std::unique_ptr<ExpNode> returnValue = nullptr;
         if (!check(TokenType::SEMICN)) {
-            parseExp();
+            returnValue = parseExp();
         }
-        consume(TokenType::SEMICN);
-        printSyntaxUnit("Stmt");
+        consume(TokenType::SEMICN, "Expected ';' after return statement");
+        return std::make_unique<ReturnStmtNode>(std::move(returnValue), returnToken.line);
     } else if (check(TokenType::PRINTFTK)) {
-        consume();
-        consume(TokenType::LPARENT);
-        consume(TokenType::STRCON);
-        
+        Token printfToken = consume(); // 'printf'
+        consume(TokenType::LPARENT, "Expected '(' after 'printf'");
+        auto formatStr = parseFormatString();
+        auto printfNode = std::make_unique<PrintfStmtNode>(std::move(formatStr), printfToken.line);
         while (check(TokenType::COMMA)) {
-            consume();
-            parseExp();
+            consume(); // ','
+            printfNode->args.push_back(parseExp());
         }
-        
-        consume(TokenType::RPARENT);
-        consume(TokenType::SEMICN);
-        printSyntaxUnit("Stmt");
-    } else if (check(TokenType::LBRACE)) {
-        parseBlock();
-        printSyntaxUnit("Stmt");
-    } else if (check(TokenType::SEMICN)) {
-        consume();
-        printSyntaxUnit("Stmt");
+        consume(TokenType::RPARENT, "Expected ')' after printf arguments");
+        consume(TokenType::SEMICN, "Expected ';' after printf statement");
+        return printfNode;
+    } else if (check(TokenType::LBRACE)) { // Block
+        return parseBlock();
+    } else if (check(TokenType::SEMICN)) { // Empty statement [Exp]; where Exp is null
+        Token semiToken = consume(); // ';'
+        return std::make_unique<ExpStmtNode>(nullptr, semiToken.line);
     } else {
-        // 尝试解析赋值语句或表达式语句
+        // This can be LVal = ... or Exp;
+        // Try parsing as LVal first to see if it's an assignment.
+        // This requires a way to "peek" or "try parse".
+        // A common approach for LL parsers is to parse the common prefix (LVal or start of Exp)
+        // and then decide.
+        // If current token is IDENFR, it could be start of LVal or start of Exp (e.g. function call).
+        // Let's parse an expression. If it's an LVal and followed by '=', it's assignment.
+        // This is tricky. The grammar `LVal '=' Exp` vs `[Exp];`
+        // If we parse an LVal, and next is '=', it's assignment.
+        // If we parse an LVal, and next is ';', it's an ExpStmt with LVal as Exp.
+        // If we parse a Number, and next is ';', it's an ExpStmt.
+
+        // Simplified: Check if it's an assignment by looking for LVal followed by '='
+        // This is a classic LL parsing dilemma. One way is to parse LVal, then check next token.
+        // If it's '=', then it's an assignment. Otherwise, that LVal is part of an Exp.
+        // This might require backtracking or a more sophisticated lookahead.
+
+        // For your grammar, LVal is also a PrimaryExp, so an LVal can be an Exp.
+        // Let's try to parse LVal. If successful and followed by '=', it's assignment.
+        // Otherwise, it's an Exp.
         
-        // 检查是否可能是赋值语句
-        if (check(TokenType::IDENFR)) {
-            // 尝试解析左值
-            size_t savePos = currentPos;
-            bool isAssignment = false;
-            
-            // 先解析标识符
-            consume();
-            
-            // 处理数组下标
-            while (check(TokenType::LBRACK)) {
-                consume();
-                parseExp();
-                consume(TokenType::RBRACK);
-            }
-            
-            // 如果下一个是'='，则是赋值语句
-            if (check(TokenType::ASSIGN)) {
-                // 输出LVal
-                printSyntaxUnit("LVal");
-                isAssignment = true;
-                
-                consume(TokenType::ASSIGN);
-                
-                // getint() 调用
-                if (check(TokenType::GETINTTK)) {
-                    consume();
-                    consume(TokenType::LPARENT);
-                    consume(TokenType::RPARENT);
-                } else {
-                    parseExp();
+        // Heuristic: if IDENFR is followed by ( LBRACK or ASSIGN ), it's likely LVal for assignment.
+        // This is still not robust enough.
+        // The standard way is to parse the longest possible LVal.
+        // Then check if the next token is ASSIGN.
+        
+        // Let's assume `parseExp()` can handle LVal as a part of it.
+        // If the expression statement is `lval;`, `parseExp` will return an `LValNode`.
+        // If it's `lval = exp;`, we need to distinguish.
+
+        // Try parsing LVal:
+        if (check(TokenType::IDENFR)) { // Potential LVal start
+            // Peek ahead for '=' without consuming the LVal structure yet.
+            // This is where an AST helps: parse the LVal, then decide.
+            // Let's try to parse LVal and see if next is '='
+            size_t preLValPos = currentPos;
+            try {
+                auto lval = parseLVal(); // Tentatively parse LVal
+                if (check(TokenType::ASSIGN)) { // It's an assignment
+                    consume(TokenType::ASSIGN, "Expected '=' for assignment"); // '='
+                    if (check(TokenType::GETINTTK)) {
+                        Token getintToken = consume(); // 'getint'
+                        consume(TokenType::LPARENT, "Expected '(' after 'getint'");
+                        consume(TokenType::RPARENT, "Expected ')' after 'getint()'");
+                        consume(TokenType::SEMICN, "Expected ';' after getint statement");
+                        return std::make_unique<AssignStmtNode>(std::move(lval), getintToken.line);
+                    } else {
+                        auto rhs = parseExp();
+                        consume(TokenType::SEMICN, "Expected ';' after assignment statement");
+                        return std::make_unique<AssignStmtNode>(std::move(lval), std::move(rhs), lval->lineNumber);
+                    }
+                } else { // Not an assignment, LVal is part of an ExpStmt
+                    currentPos = preLValPos; // Backtrack
                 }
-                
-                consume(TokenType::SEMICN);
-                printSyntaxUnit("Stmt");
-                return;
-            } else {
-                // 不是赋值语句，回溯到标识符处重新解析
-                currentPos = savePos;
+            } catch (const std::runtime_error& e) { // Parsing LVal failed, or something else
+                currentPos = preLValPos; // Backtrack
+                // It might not have been an LVal, or LVal parsing itself failed.
+                // Proceed to parse as general Exp.
             }
         }
-        
-        // 处理表达式语句
-        if (!check(TokenType::SEMICN)) {
-            parseExp();
-        }
-        consume(TokenType::SEMICN);
-        printSyntaxUnit("Stmt");
-    }
-    
-    // 检查以确保进展
-    if (currentPos == startPos) {
-        // 强制前进以避免死循环
-        if (currentPos < tokens.size()) {
-            currentPos++;
-        }
+
+        // If not an assignment identified above, or if it doesn't start with IDENFR for LVal check
+        auto exp = parseExp();
+        consume(TokenType::SEMICN, "Expected ';' after expression statement");
+        return std::make_unique<ExpStmtNode>(std::move(exp), exp ? exp->lineNumber : line);
     }
 }
 
-// 解析基本表达式
-void Parser::parsePrimaryExp() {
-    // 保存起始位置以防死循环
-    size_t startPos = currentPos;
-    
+
+// PrimaryExp ::= '(' Exp ')' | LVal | Number
+std::unique_ptr<ExpNode> Parser::parsePrimaryExp() {
     if (check(TokenType::LPARENT)) {
-        consume();
-        parseExp();
-        consume(TokenType::RPARENT);
-    } else if (check(TokenType::IDENFR)) {
-        parseLVal();
+        consume(); // '('
+        auto exp = parseExp();
+        consume(TokenType::RPARENT, "Expected ')' after expression in parentheses");
+        return exp;
+    } else if (check(TokenType::IDENFR)) { // Could be LVal or start of FuncCall (handled in UnaryExp)
+        return parseLVal(); // LVal is a type of ExpNode
     } else if (check(TokenType::INTCON)) {
-        parseNumber();
+        return parseNumber();
     } else {
-        // 错误处理：尝试恢复
-        if (currentPos < tokens.size()) {
-            consume(); // 跳过当前token
-        }
-    }
-    
-    printSyntaxUnit("PrimaryExp");
-    
-    // 检查是否有进展
-    if (currentPos == startPos && currentPos < tokens.size()) {
-        currentPos++; // 强制前进
+        throw std::runtime_error("Expected '(', identifier, or number for primary expression at line " + std::to_string(getCurrentLine()));
     }
 }
 
-// 解析左值表达式
-void Parser::parseLVal() {
-    if (!check(TokenType::IDENFR)) {
-        throw std::runtime_error("左值表达式中需要标识符");
-    }
-    
-    consume();
-    
+// LVal ::= Ident {'[' Exp ']'}
+std::unique_ptr<LValNode> Parser::parseLVal() {
+    Token idToken = consume(TokenType::IDENFR, "Expected identifier for LValue");
+    auto lvalNode = std::make_unique<LValNode>(idToken);
     while (check(TokenType::LBRACK)) {
-        consume();
-        parseExp();
-        if (!check(TokenType::RBRACK)) {
-            throw std::runtime_error("数组访问中缺少右方括号");
-        }
-        consume();
+        consume(); // '['
+        lvalNode->arrayIndices.push_back(parseExp());
+        consume(TokenType::RBRACK, "Expected ']' after array index");
     }
-    
-    printSyntaxUnit("LVal");
+    return lvalNode;
 }
 
-// 解析数字
-void Parser::parseNumber() {
-    consume(TokenType::INTCON);
-    printSyntaxUnit("Number");
+// Number ::= IntConst
+std::unique_ptr<NumberNode> Parser::parseNumber() {
+    Token numToken = consume(TokenType::INTCON, "Expected integer constant");
+    return std::make_unique<NumberNode>(numToken);
 }
 
-// 解析一元表达式
-void Parser::parseUnaryExp() {
-    if (check(TokenType::IDENFR) && currentPos + 1 < tokens.size() && tokens[currentPos + 1].type == TokenType::LPARENT) {
-        // 函数调用
-        consume(TokenType::IDENFR);
-        consume(TokenType::LPARENT);
-        
-        // A处理可能的函数参数
-        if (!check(TokenType::RPARENT)) {
-            parseFuncRParams();
-        }
-        
-        consume(TokenType::RPARENT);
-    } else if (check(TokenType::PLUS) || check(TokenType::MINU) || check(TokenType::NOT)) {
-        parseUnaryOp();
-        parseUnaryExp();
-    } else {
-        parsePrimaryExp();
-    }
-    
-    printSyntaxUnit("UnaryExp");
-}
-
-// 解析一元运算符
-void Parser::parseUnaryOp() {
+// UnaryExp ::= PrimaryExp | Ident '(' [FuncRParams] ')' | UnaryOp UnaryExp
+std::unique_ptr<ExpNode> Parser::parseUnaryExp() {
+    // Check for UnaryOp UnaryExp first
     if (check(TokenType::PLUS) || check(TokenType::MINU) || check(TokenType::NOT)) {
-        consume();
+        return parseUnaryOpAndExp();
     }
-    
-    printSyntaxUnit("UnaryOp");
+    // Check for Ident '(' ... ')' -- Function Call
+    else if (check(TokenType::IDENFR) && lookAhead(TokenType::LPARENT)) {
+        Token funcIdToken = consume(TokenType::IDENFR, "Expected function identifier for call");
+        auto funcCallNode = std::make_unique<FuncCallNode>(funcIdToken);
+        consume(TokenType::LPARENT, "Expected '(' for function call");
+        if (!check(TokenType::RPARENT)) {
+            funcCallNode->args = parseFuncRParams();
+        }
+        consume(TokenType::RPARENT, "Expected ')' after function call arguments");
+        return funcCallNode;
+    }
+    // Otherwise, it's a PrimaryExp
+    else {
+        return parsePrimaryExp();
+    }
 }
 
-// 解析函数实参列表
-void Parser::parseFuncRParams() {
-    parseExp();
-    
+// Helper for UnaryOp UnaryExp part of UnaryExp rule
+std::unique_ptr<UnaryExpNode> Parser::parseUnaryOpAndExp() {
+    Token opToken = consume(); // Consumes '+', '-', or '!'
+    if (opToken.type != TokenType::PLUS && opToken.type != TokenType::MINU && opToken.type != TokenType::NOT) {
+        throw std::runtime_error("Expected unary operator (+, -, !) at line " + std::to_string(opToken.line));
+    }
+    auto operand = parseUnaryExp(); // Recursive call for the UnaryExp part
+    return std::make_unique<UnaryExpNode>(opToken, std::move(operand));
+}
+
+
+// FuncRParams ::= Exp {',' Exp}
+std::vector<std::unique_ptr<ExpNode>> Parser::parseFuncRParams() {
+    std::vector<std::unique_ptr<ExpNode>> args;
+    args.push_back(parseExp());
     while (check(TokenType::COMMA)) {
-        consume();
-        parseExp();
+        consume(); // ','
+        args.push_back(parseExp());
     }
-    
-    printSyntaxUnit("FuncRParams");
+    return args;
 }
 
-// 解析乘法表达式
-void Parser::parseMulExp() {
-    parseUnaryExp();
-    printSyntaxUnit("MulExp");  // 在解析操作符前输出MulExp
-    
-    while (currentPos < tokens.size() && (check(TokenType::MULT) || check(TokenType::DIV) || check(TokenType::MOD))) {
-        consume();
-        parseUnaryExp();
-        printSyntaxUnit("MulExp");  // 每次解析完一个运算符和操作数后输出MulExp
+// MulExp ::= UnaryExp {('*' | '/' | '%') UnaryExp}
+std::unique_ptr<ExpNode> Parser::parseMulExp() {
+    auto leftNode = parseUnaryExp();
+    while (check(TokenType::MULT) || check(TokenType::DIV) || check(TokenType::MOD)) {
+        Token opToken = consume();
+        auto rightNode = parseUnaryExp();
+        leftNode = std::make_unique<BinaryExpNode>(std::move(leftNode), opToken, std::move(rightNode));
     }
+    return leftNode;
 }
 
-// 解析加法表达式
-void Parser::parseAddExp() {
-    parseMulExp();
-    printSyntaxUnit("AddExp");  // 在解析操作符前输出AddExp
-    
-    while (currentPos < tokens.size() && (check(TokenType::PLUS) || check(TokenType::MINU))) {
-        consume();
-        parseMulExp();
-        printSyntaxUnit("AddExp");  // 每次解析完一个运算符和操作数后输出AddExp
+// AddExp ::= MulExp {('+' | '-') MulExp}
+std::unique_ptr<ExpNode> Parser::parseAddExp() {
+    auto leftNode = parseMulExp();
+    while (check(TokenType::PLUS) || check(TokenType::MINU)) {
+        Token opToken = consume();
+        auto rightNode = parseMulExp();
+        leftNode = std::make_unique<BinaryExpNode>(std::move(leftNode), opToken, std::move(rightNode));
     }
+    return leftNode;
 }
 
-// 解析关系表达式
-void Parser::parseRelExp() {
-    parseAddExp();
-    printSyntaxUnit("RelExp");  // 在解析操作符前输出RelExp
-    
-    while (currentPos < tokens.size() && 
-          (check(TokenType::LSS) || check(TokenType::GRE) || 
-           check(TokenType::LEQ) || check(TokenType::GEQ))) {
-        consume();
-        parseAddExp();
-        printSyntaxUnit("RelExp");  // 每次解析完一个运算符和操作数后输出RelExp
+// RelExp ::= AddExp {('<' | '>' | '<=' | '>=') AddExp}
+std::unique_ptr<ExpNode> Parser::parseRelExp() {
+    auto leftNode = parseAddExp();
+    while (check(TokenType::LSS) || check(TokenType::GRE) || check(TokenType::LEQ) || check(TokenType::GEQ)) {
+        Token opToken = consume();
+        auto rightNode = parseAddExp();
+        leftNode = std::make_unique<BinaryExpNode>(std::move(leftNode), opToken, std::move(rightNode));
     }
+    return leftNode;
 }
 
-// 解析相等性表达式
-void Parser::parseEqExp() {
-    parseRelExp();
-    printSyntaxUnit("EqExp");  // 在解析操作符前输出EqExp
-    
-    while (currentPos < tokens.size() && (check(TokenType::EQL) || check(TokenType::NEQ))) {
-        consume();
-        parseRelExp();
-        printSyntaxUnit("EqExp");  // 每次解析完一个运算符和操作数后输出EqExp
+// EqExp ::= RelExp {('==' | '!=') RelExp}
+std::unique_ptr<ExpNode> Parser::parseEqExp() {
+    auto leftNode = parseRelExp();
+    while (check(TokenType::EQL) || check(TokenType::NEQ)) {
+        Token opToken = consume();
+        auto rightNode = parseRelExp();
+        leftNode = std::make_unique<BinaryExpNode>(std::move(leftNode), opToken, std::move(rightNode));
     }
+    return leftNode;
 }
 
-// 解析逻辑与表达式
-void Parser::parseLAndExp() {
-    parseEqExp();
-    printSyntaxUnit("LAndExp");  // 在解析操作符前输出LAndExp
-    
-    while (currentPos < tokens.size() && check(TokenType::AND)) {
-        consume();
-        parseEqExp();
-        printSyntaxUnit("LAndExp");  // 每次解析完一个运算符和操作数后输出LAndExp
+// LAndExp ::= EqExp {'&&' EqExp}
+std::unique_ptr<ExpNode> Parser::parseLAndExp() {
+    auto leftNode = parseEqExp();
+    while (check(TokenType::AND)) {
+        Token opToken = consume();
+        auto rightNode = parseEqExp();
+        leftNode = std::make_unique<BinaryExpNode>(std::move(leftNode), opToken, std::move(rightNode));
     }
+    return leftNode;
 }
 
-// 解析逻辑或表达式
-void Parser::parseLOrExp() {
-    parseLAndExp();
-    printSyntaxUnit("LOrExp");  // 在解析操作符前输出LOrExp
-    
-    while (currentPos < tokens.size() && check(TokenType::OR)) {
-        consume();
-        parseLAndExp();
-        printSyntaxUnit("LOrExp");  // 每次解析完一个运算符和操作数后输出LOrExp
+// LOrExp ::= LAndExp {'||' LAndExp}
+std::unique_ptr<ExpNode> Parser::parseLOrExp() {
+    auto leftNode = parseLAndExp();
+    while (check(TokenType::OR)) {
+        Token opToken = consume();
+        auto rightNode = parseLAndExp();
+        leftNode = std::make_unique<BinaryExpNode>(std::move(leftNode), opToken, std::move(rightNode));
     }
+    return leftNode;
 }
 
-// 解析条件表达式
-void Parser::parseCond() {
-    parseLOrExp();
-    printSyntaxUnit("Cond");
+// Cond ::= LOrExp
+std::unique_ptr<ExpNode> Parser::parseCond() {
+    return parseLOrExp();
 }
 
-// 解析if语句
-void Parser::parseIfStmt() {
-    consume(TokenType::IFTK);
-    
-    if (!check(TokenType::LPARENT)) {
-        throw std::runtime_error("'if'后需要'('");
-    }
-    consume(TokenType::LPARENT);
-    
-    parseCond();
-    
-    if (!check(TokenType::RPARENT)) {
-        throw std::runtime_error("条件后需要')'");
-    }
-    consume(TokenType::RPARENT);
-    
-    parseStmt();
-    
+// Exp ::= AddExp
+std::unique_ptr<ExpNode> Parser::parseExp() {
+    return parseAddExp();
+}
+
+// ConstExp ::= AddExp
+std::unique_ptr<ExpNode> Parser::parseConstExp() {
+    // For AST structure, ConstExp is an AddExp.
+    // Semantic analysis will later verify its constant nature.
+    return parseAddExp();
+}
+
+// 'if' '(' Cond ')' Stmt ['else' Stmt]
+std::unique_ptr<IfStmtNode> Parser::parseIfStmt() {
+    Token ifToken = consume(TokenType::IFTK, "Expected 'if' keyword");
+    consume(TokenType::LPARENT, "Expected '(' after 'if'");
+    auto condition = parseCond();
+    consume(TokenType::RPARENT, "Expected ')' after if condition");
+    auto thenStmt = parseStmt();
+    std::unique_ptr<StmtNode> elseStmt = nullptr;
     if (check(TokenType::ELSETK)) {
-        consume();
-        parseStmt();
+        consume(); // 'else'
+        elseStmt = parseStmt();
     }
-    
-    printSyntaxUnit("Stmt");
+    return std::make_unique<IfStmtNode>(std::move(condition), std::move(thenStmt), std::move(elseStmt), ifToken.line);
 }
 
-// 解析while语句
-void Parser::parseWhileStmt() {
-    consume(TokenType::WHILETK);
-    
-    if (!check(TokenType::LPARENT)) {
-        throw std::runtime_error("'while'后需要'('");
-    }
-    consume(TokenType::LPARENT);
-    
-    parseCond();
-    
-    if (!check(TokenType::RPARENT)) {
-        throw std::runtime_error("条件后需要')'");
-    }
-    consume(TokenType::RPARENT);
-    
-    parseStmt();
-    printSyntaxUnit("Stmt");
+// 'while' '(' Cond ')' Stmt
+std::unique_ptr<WhileStmtNode> Parser::parseWhileStmt() {
+    Token whileToken = consume(TokenType::WHILETK, "Expected 'while' keyword");
+    consume(TokenType::LPARENT, "Expected '(' after 'while'");
+    auto condition = parseCond();
+    consume(TokenType::RPARENT, "Expected ')' after while condition");
+    auto body = parseStmt();
+    return std::make_unique<WhileStmtNode>(std::move(condition), std::move(body), whileToken.line);
 }
 
-// 解析常量表达式
-void Parser::parseConstExp() {
-    parseAddExp();
-    printSyntaxUnit("ConstExp");
+// FormatString (used in printf)
+std::unique_ptr<FormatStringNode> Parser::parseFormatString() {
+    Token strToken = consume(TokenType::STRCON, "Expected format string for printf");
+    return std::make_unique<FormatStringNode>(strToken);
 }
 
-// 解析表达式
-void Parser::parseExp() {
-    parseAddExp();
-    printSyntaxUnit("Exp");
-}

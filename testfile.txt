@@ -1,0 +1,89 @@
+int ddddddd = 2;
+
+
+
+void nothing()
+{
+  
+}
+
+void nothing1(int a)
+{
+  return;
+}
+
+int nothing2(int a)
+{
+  return a;
+}
+
+int nothing3(int a,int b)
+{
+  return a;
+}
+
+int nothing4()
+{
+  return 1;
+}
+
+
+int main()
+{
+  int arr[10];
+  int brr[3] = {1, 2, 3};
+  int a = 1;
+  const int crr[2] = {1,2};
+
+  const int cccc = 1;
+  const int dddd = 2;
+  const int eeee = 2,ffff=3;
+
+
+  int nn1,nn2,nn3;
+  int dd1=2,dd3=2,dd2=2;
+
+  arr[0] = 1;
+
+  int c = 1 + 2 + (3 * 2) - (2 % 1) / 2;
+
+  int d22 = 2;
+
+  d22 = c - a;
+  c = a;
+
+  c = -a;
+  c = +c;
+  
+
+  arr[2] = a;
+
+  nothing1(a);
+  c = nothing3(a,a);
+  c = (nothing3(a,a) + 2);
+  c = nothing4();
+  
+  
+
+  int d;
+  d = getint();
+
+  printf("2023202312\n");
+  while (1 > 2 || 2 < 1 && 2 <= 1 && 3 >= 4 && 3 == 8 && !1 && 2 != 2 )
+  {
+    if (10 > 100)
+    {
+      printf("This is impossible.");
+      continue;
+    } else {
+
+    break;
+    }
+
+    if(1 > 2);
+  }
+
+  printf("%d",a);
+
+  return 0;
+}

@@ -5,44 +5,54 @@
 #include <string>
 #include <stdexcept>
 #include <fstream>
+#include <memory>   // For std::unique_ptr
 #include "token.h"
+#include "ast.h"    // Include AST node definitions
 
 /**
- * @brief 语法分析器类，用于将token序列解析为语法树
- * 
- * 此类实现了递归下降语法分析器，能够解析符合语法规则的程序
+ * @brief 语法分析器类，用于将token序列解析为抽象语法树 (AST)
+ * * 此类实现了递归下降语法分析器，能够构建程序的AST结构
  * 包括常量声明、变量声明、函数定义、表达式、语句等语法单元
  */
 class Parser {
 private:
     std::vector<Token> tokens;    // 词法分析器产生的token序列
     size_t currentPos = 0;        // 当前正在处理的token位置
-    std::ofstream& outFile;       // 输出文件流
+    std::ofstream& outFile;       // 输出文件流 (用于打印AST)
   
     /**
-     * @brief 获取当前token
+     * @brief 获取当前token的引用，如果越界则抛出异常
      * @return 当前位置的token引用
      */
-    Token& getCurrentToken();
+    const Token& getCurrentToken() const;
+
+    /**
+     * @brief 获取当前token的行号，如果越界则返回0或抛出
+     * @return 当前token的行号
+     */
+    size_t getCurrentLine() const;
+
 
     /**
      * @brief 检查当前token的类型
      * @param type 需要检查的token类型
      * @return 如果当前token类型匹配则返回true，否则返回false
      */
-    bool check(TokenType type);
+    bool check(TokenType type) const;
 
     /**
      * @brief 消耗当前token并前进到下一个token
+     * @return 被消耗的token的拷贝
      */
-    void consume();
+    Token consume();
 
     /**
-     * @brief 检查当前token类型并消耗
+     * @brief 检查当前token类型并消耗，如果不匹配则抛出异常
      * @param type 需要消耗的token类型
-     * @return 如果成功消耗则返回true，否则返回false
+     * @param errorMessage 错误信息（如果类型不匹配）
+     * @return 被消耗的token的拷贝
      */
-    bool consume(TokenType type);
+    Token consume(TokenType type, const std::string& errorMessage);
 
     /**
      * @brief 预览后续的token
@@ -50,239 +60,64 @@ private:
      * @param offset 向前预览的偏移量
      * @return 如果预览位置的token类型匹配则返回true，否则返回false
      */
-    bool lookAhead(TokenType type, int offset = 1);
+    bool lookAhead(TokenType type, int offset = 1) const;
 
-    /**
-     * @brief 输出语法单元名称
-     * @param name 语法单元名称
-     */
-    void printSyntaxUnit(const std::string& name);
-
-    /**
-     * @brief 输出Token的类型
-     * @param type Token类型
-     */
-    void printAns(TokenType type);
-
-    /**
-     * @brief 解析编译单元（程序的最高层次结构）
-     * CompUnit ::= [CompUnit] (Decl | FuncDef)
-     */
-    void parseCompUnit();
+    // --- AST Node Parsing Methods ---
+    std::unique_ptr<CompUnitNode> parseCompUnit();
+    std::unique_ptr<AstNode> parseDeclOrFuncDef(); // Helper for CompUnit
+    std::unique_ptr<FuncDefNode> parseFuncDef();
+    std::unique_ptr<FuncTypeNode> parseFuncType();
+    std::unique_ptr<FuncFParamsNode> parseFuncFParams();
+    std::unique_ptr<FuncFParamNode> parseFuncFParam();
+    std::unique_ptr<MainFuncDefNode> parseMainFuncDef();
+    std::unique_ptr<BlockNode> parseBlock();
+    std::unique_ptr<BlockItemNode> parseBlockItem(); // Returns DeclNode or StmtNode wrapped in BlockItemNode
+    std::unique_ptr<DeclNode> parseDecl(); // Returns ConstDeclNode or VarDeclNode
+    std::unique_ptr<ConstDeclNode> parseConstDecl();
+    std::unique_ptr<BTypeNode> parseBType();
+    std::unique_ptr<ConstDefNode> parseConstDef();
+    std::unique_ptr<ConstInitValNode> parseConstInitVal();
+    std::unique_ptr<VarDeclNode> parseVarDecl();
+    std::unique_ptr<VarDefNode> parseVarDef();
+    std::unique_ptr<InitValNode> parseInitVal();
+    std::unique_ptr<StmtNode> parseStmt();
     
-    /**
-     * @brief 解析函数定义
-     * FuncDef ::= FuncType Ident '(' [FuncFParams] ')' Block
-     */
-    void parseFuncDef();
-    
-    /**
-     * @brief 解析函数类型
-     * FuncType ::= 'void' | 'int'
-     */
-    void parseFuncType();
-    
-    /**
-     * @brief 解析函数形式参数列表
-     * FuncFParams ::= FuncFParam {',' FuncFParam}
-     */
-    void parseFuncFParams();
-    
-    /**
-     * @brief 解析函数形式参数
-     * FuncFParam ::= BType Ident ['[' ']' {'[' ConstExp ']'}]
-     */
-    void parseFuncFParam();
+    // Expressions
+    std::unique_ptr<ExpNode> parseExp();
+    std::unique_ptr<ExpNode> parseCond(); // Cond ::= LOrExp
+    std::unique_ptr<ExpNode> parseLOrExp();
+    std::unique_ptr<ExpNode> parseLAndExp();
+    std::unique_ptr<ExpNode> parseEqExp();
+    std::unique_ptr<ExpNode> parseRelExp();
+    std::unique_ptr<ExpNode> parseAddExp();
+    std::unique_ptr<ExpNode> parseMulExp();
+    std::unique_ptr<ExpNode> parseUnaryExp();
+    std::unique_ptr<UnaryExpNode> parseUnaryOpAndExp(); // Helper for UnaryOp UnaryExp
+    std::unique_ptr<ExpNode> parsePrimaryExp();
+    std::unique_ptr<LValNode> parseLVal();
+    std::unique_ptr<NumberNode> parseNumber();
+    std::vector<std::unique_ptr<ExpNode>> parseFuncRParams(); // Returns a vector of argument expressions
+    std::unique_ptr<ExpNode> parseConstExp(); // ConstExp ::= AddExp
 
-    /**
-     * @brief 解析main函数定义
-     * MainFuncDef ::= 'int' 'main' '(' ')' Block
-     */
-    void parseMainFuncDef();
+    // Specific statement types
+    std::unique_ptr<IfStmtNode> parseIfStmt();
+    std::unique_ptr<WhileStmtNode> parseWhileStmt();
+    std::unique_ptr<FormatStringNode> parseFormatString();
 
-    /**
-     * @brief 解析代码块
-     * Block ::= '{' {BlockItem} '}'
-     */
-    void parseBlock();
-
-    /**
-     * @brief 解析块中的项
-     * BlockItem ::= Decl | Stmt
-     */
-    void parseBlockItem();
-
-    /**
-     * @brief 解析声明
-     * Decl ::= ConstDecl | VarDecl
-     */
-    void parseDecl();
-
-    /**
-     * @brief 解析常量声明
-     * ConstDecl ::= 'const' BType ConstDef {',' ConstDef} ';'
-     */
-    void parseConstDecl();
-
-    /**
-     * @brief 解析基本类型
-     * BType ::= 'int'
-     */
-    void parseBType();
-
-    /**
-     * @brief 解析常量定义
-     * ConstDef ::= Ident {'[' ConstExp ']'} '=' ConstInitVal
-     */
-    void parseConstDef();
-
-    /**
-     * @brief 解析常量初始值
-     * ConstInitVal ::= ConstExp | '{' [ConstInitVal {',' ConstInitVal}] '}'
-     */
-    void parseConstInitVal();
-
-    /**
-     * @brief 解析变量声明
-     * VarDecl ::= BType VarDef {',' VarDef} ';'
-     */
-    void parseVarDecl();
-
-    /**
-     * @brief 解析变量定义
-     * VarDef ::= Ident {'[' ConstExp ']'} ['=' InitVal]
-     */
-    void parseVarDef();
-
-    /**
-     * @brief 解析变量初始值
-     * InitVal ::= Exp | '{' [InitVal {',' InitVal}] '}'
-     */
-    void parseInitVal();
-
-    /**
-     * @brief 解析语句
-     * Stmt ::= LVal '=' Exp ';' | [Exp] ';' | Block | 'if' '(' Cond ')' Stmt [ 'else' Stmt ]
-     *       | 'while' '(' Cond ')' Stmt | 'break' ';' | 'continue' ';' 
-     *       | 'return' [Exp] ';' | LVal '=' 'getint' '(' ')' ';' | 'printf' '(' FormatString {',' Exp} ')' ';'
-     */
-    void parseStmt();
-
-    /**
-     * @brief 解析基本表达式
-     * PrimaryExp ::= '(' Exp ')' | LVal | Number
-     */
-    void parsePrimaryExp();
-
-    /**
-     * @brief 解析左值表达式
-     * LVal ::= Ident {'[' Exp ']'}
-     */
-    void parseLVal();
-
-    /**
-     * @brief 解析数字
-     * Number ::= IntConst
-     */
-    void parseNumber();
-
-    /**
-     * @brief 解析一元表达式
-     * UnaryExp ::= PrimaryExp | Ident '(' [FuncRParams] ')' | UnaryOp UnaryExp
-     */
-    void parseUnaryExp();
-
-    /**
-     * @brief 解析一元运算符
-     * UnaryOp ::= '+' | '-' | '!'
-     */
-    void parseUnaryOp();
-
-    /**
-     * @brief 解析函数实参列表
-     * FuncRParams ::= Exp {',' Exp}
-     */
-    void parseFuncRParams();
-
-    /**
-     * @brief 解析乘法表达式
-     * MulExp ::= UnaryExp {('*' | '/' | '%') UnaryExp}
-     */
-    void parseMulExp();
-
-    /**
-     * @brief 解析加法表达式
-     * AddExp ::= MulExp {('+' | '-') MulExp}
-     */
-    void parseAddExp();
-
-    /**
-     * @brief 解析关系表达式
-     * RelExp ::= AddExp {('<' | '>' | '<=' | '>=') AddExp}
-     */
-    void parseRelExp();
-
-    /**
-     * @brief 解析相等性表达式
-     * EqExp ::= RelExp {('==' | '!=') RelExp}
-     */
-    void parseEqExp();
-
-    /**
-     * @brief 解析逻辑与表达式
-     * LAndExp ::= EqExp {'&&' EqExp}
-     */
-    void parseLAndExp();
-
-    /**
-     * @brief 解析逻辑或表达式
-     * LOrExp ::= LAndExp {'||' LAndExp}
-     */
-    void parseLOrExp();
-
-    /**
-     * @brief 解析条件表达式
-     * Cond ::= LOrExp
-     */
-    void parseCond();
-
-    /**
-     * @brief 解析if语句
-     * 'if' '(' Cond ')' Stmt ['else' Stmt]
-     */
-    void parseIfStmt();
-
-    /**
-     * @brief 解析while语句
-     * 'while' '(' Cond ')' Stmt
-     */
-    void parseWhileStmt();
-
-    /**
-     * @brief 解析常量表达式
-     * ConstExp ::= AddExp
-     */
-    void parseConstExp();
-
-    /**
-     * @brief 解析表达式
-     * Exp ::= AddExp
-     */
-    void parseExp();
 
 public:
     /**
      * @brief 构造语法分析器
      * @param tokens 词法分析产生的token序列
-     * @param out 输出文件流
+     * @param out 输出文件流 (用于打印AST)
      */
     Parser(const std::vector<Token>& tokens, std::ofstream& out);
 
     /**
-     * @brief 执行语法分析
-     * 从CompUnit开始，完成整个程序的语法分析
+     * @brief 执行语法分析并构建AST
+     * @return 指向根节点 (CompUnitNode) 的智能指针
      */
-    void parse();
+    std::unique_ptr<CompUnitNode> parse();
 };
 
 #endif 

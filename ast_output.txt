@@ -1,0 +1,5 @@
+CompUnitNode (Line: 1)
+  MainFuncDefNode (int main) (Line: 1)
+    BlockNode (Line: 1)
+      ReturnStmtNode (Line: 1)
+        NumberNode: 0 (Line: 1)
