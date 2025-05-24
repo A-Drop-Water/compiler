@@ -1,237 +1,297 @@
 #include "lexer.h"
-#include <cctype>
+#include "token.h" 
+#include <iostream> 
+#include <cctype>   
+#include <unordered_map>
+#include <variant> // Required for std::get, std::holds_alternative
 
-Lexer::Lexer(const std::string &code) : input(code), pos(0), line(1)
-{
-  // 初始化关键字集合
-  keywords = {
-      {"main", TokenType::MAINTK},
-      {"const", TokenType::CONSTTK},
-      {"int", TokenType::INTTK},
-      {"if", TokenType::IFTK},
-      {"break", TokenType::BREAKTK},
-      {"else", TokenType::ELSETK},
-      {"continue", TokenType::CONTINUETK},
-      {"while", TokenType::WHILETK},
-      {"void", TokenType::VOIDTK},
-      {"getint", TokenType::GETINTTK},
-      {"printf", TokenType::PRINTFTK},
-      {"return", TokenType::RETURNTK},
-  };
+// Keyword map
+static std::unordered_map<std::string, TokenType> keywords = {
+    {"const", TokenType::KEYWORD_CONST},
+    {"int", TokenType::KEYWORD_INT},
+    {"void", TokenType::KEYWORD_VOID},
+    {"main", TokenType::KEYWORD_MAIN},
+    {"if", TokenType::KEYWORD_IF},
+    {"else", TokenType::KEYWORD_ELSE},
+    {"while", TokenType::KEYWORD_WHILE},
+    {"break", TokenType::KEYWORD_BREAK},
+    {"continue", TokenType::KEYWORD_CONTINUE},
+    {"return", TokenType::KEYWORD_RETURN},
+    {"getint", TokenType::KEYWORD_GETINT},
+    {"printf", TokenType::KEYWORD_PRINTF}
+};
+
+Lexer::Lexer(const std::string& filename) : line(1), column(0), currentLineContent("") {
+    sourceFile.open(filename);
+    if (!sourceFile.is_open()) {
+        std::cerr << "Error: Could not open file " << filename << std::endl;
+        currentLineContent = ""; 
+        sourceFile.setstate(std::ios_base::badbit); 
+    } else {
+        loadNextLine(); 
+    }
 }
 
-std::vector<Token> Lexer::tokenize()
-{
-  std::vector<Token> tokens;
-  while (pos < input.size())
-  {
-    char current = input[pos];
-    if (std::isspace(current))
-    {
-      handleWhitespace(); // 处理空格和换行
+void Lexer::loadNextLine() {
+    if (std::getline(sourceFile, currentLineContent)) {
+        currentLineContent += '\n'; 
+        column = 0; 
+    } else {
+        currentLineContent = ""; 
     }
-    else if (std::isalpha(current) || current == '_')
-    {
-      tokens.push_back(parseIdentifierOrKeyword());
-    }
-    else if (std::isdigit(current))
-    {
-      tokens.push_back(parseInteger());
-      // pos++;
-    }
-    else if (current == '"')
-    {
-      tokens.push_back(parseString());
-    }
-    else if (isZhushi())
-    {
-      // 是注释跳过注释
-      zhushi();
-    }
-    else
-    {
-      tokens.push_back(parseSymbol());
-      // pos++;
-    }
-  }
-  return tokens;
 }
 
-bool Lexer::isZhushi()
-{
-  return input[pos] == '/' && (pos + 1 < input.size()) && (input[pos + 1] == '/' || input[pos + 1] == '*');
-}
-
-// 辅助函数：处理空白符（包括换行）
-void Lexer::handleWhitespace()
-{
-  while (pos < input.size() && std::isspace(input[pos]))
-  {
-    if (input[pos] == '\n')
-      line++;
-    pos++;
-  }
-}
-
-// 解析标识符或关键字
-Token Lexer::parseIdentifierOrKeyword()
-{
-  size_t start = pos;
-  while (pos < input.size() && (std::isalnum(input[pos]) || input[pos] == '_'))
-  {
-    pos++;
-  }
-  std::string value = input.substr(start, pos - start);
-  if (keywords.find(value) != keywords.end())
-  {
-    return Token(keywords[value], value, line);
-  }
-  return Token(TokenType::IDENFR, value, line);
-}
-
-// 解析整数
-Token Lexer::parseInteger()
-{
-  size_t start = pos;
-  while (pos < input.size() && std::isdigit(input[pos]))
-  {
-    pos++;
-  }
-  return Token(TokenType::INTCON, input.substr(start, pos - start), line);
-}
-
-// 跳过注释
-void Lexer::zhushi()
-{
-  pos += 2; // 跳过 '//'或'/*'
-  
-  // 如果是 // 跳到下一行
-  if (input[pos-1] == '/')
-  {
-    while (pos < input.size() && input[pos] != '\n')
-      pos++;
-    // 此时pos执行到\n或文件末尾
-  }
-  else // 如果是 /* 找到对应的 */
-  {
-    bool found = false;
-    while (pos + 1 < input.size() && !found) 
-    {
-      if (input[pos] == '*' && input[pos + 1] == '/') {
-        found = true;
-        pos += 2; // 跳过 */
-      } else {
-        if (input[pos] == '\n') {
-          line++;
+char Lexer::currentChar() {
+    if (column >= currentLineContent.length()) { 
+        if (!sourceFile.is_open() || sourceFile.bad()) {
+             return '\0';
         }
-        pos++;
-      }
+        loadNextLine(); 
+        if (currentLineContent.empty()) { 
+            return '\0';
+        }
     }
-    
-    // 如果没找到注释结束符，移动到文件末尾
-    if (!found && pos < input.size()) {
-      pos = input.size();
-    }
-  }
+    return currentLineContent[column];
 }
 
-// 解析字符串
-Token Lexer::parseString()
-{
-  pos++; // 跳过起始的 "
-  size_t start = pos;
-  while (pos < input.size() && input[pos] != '"')
-  {
-    if (input[pos] == '\n')
-      line++; // 处理字符串内的换行
-    pos++;
-  }
-  if (pos >= input.size())
-  {
-    return Token(TokenType::ERROR, "Unterminated string", line);
-  }
-  std::string value = input.substr(start, pos - start);
-  pos++; // 跳过结束的 "
-  return Token(TokenType::STRCON, "\"" + value + "\"", line);
+void Lexer::advance() {
+    if (column < currentLineContent.length()) {
+        if (currentLineContent[column] == '\n') {
+            line++; 
+            column = currentLineContent.length(); 
+        } else {
+            column++;
+        }
+    } else {
+        loadNextLine(); 
+    }
 }
 
-// 解析符号（运算符、界符）
-Token Lexer::parseSymbol()
-{
-  char current = input[pos];
-  pos++;
-  switch (current)
-  {
-  case '|':
-    if (pos < input.size() && input[pos] == '|')
-    {
-      pos++;
-      return Token(TokenType::OR, "||", line);
+void Lexer::skipWhitespace() {
+    while (true) {
+        char c = currentChar();
+        if (c == '\0' && currentLineContent.empty()) break;
+
+        if (c == ' ' || c == '\t' || c == '\r') {
+            advance();
+        } else if (c == '\n') {
+            advance(); 
+        } else {
+            break;
+        }
     }
-    return Token(TokenType::ERROR, "别管了", line);
-  case '&':
-    if (pos < input.size() && input[pos] == '&')
-    {
-      pos++;
-      return Token(TokenType::AND, "&&", line);
+}
+
+void Lexer::consumeSingleLineComment() {
+    while (currentChar() != '\n' && currentChar() != '\0') {
+        advance(); 
     }
-    return Token(TokenType::ERROR, "别管了", line);
-  case '<':
-    if (pos < input.size() && input[pos] == '=')
-    {
-      pos++;
-      return Token(TokenType::LEQ, "<=", line);
+    if (currentChar() == '\n') {
+        advance(); 
     }
-    return Token(TokenType::LSS, "<", line);
-  case '>':
-    if (pos < input.size() && input[pos] == '=')
-    {
-      pos++;
-      return Token(TokenType::GEQ, ">=", line);
+}
+
+void Lexer::consumeMultiLineComment() {
+    int startLine = line; 
+    char prev_c = '\0';
+    while (true) {
+        char c = currentChar();
+        if (c == '\0') {
+            std::cerr << "Error: Unterminated multi-line comment starting at line " << startLine << std::endl;
+            break;
+        }
+        if (prev_c == '*' && c == '/') {
+            advance(); 
+            break;
+        }
+        prev_c = c;
+        advance(); 
     }
-    return Token(TokenType::GRE, ">", line);
-  case '=':
-    if (pos < input.size() && input[pos] == '=')
-    {
-      pos++;
-      return Token(TokenType::EQL, "==", line);
+}
+
+Token Lexer::identifier() {
+    std::string identStr;
+    int tokenLine = line; 
+    identStr += currentChar();
+    advance();
+
+    while (std::isalnum(currentChar()) || currentChar() == '_') {
+        identStr += currentChar();
+        advance();
     }
-    return Token(TokenType::ASSIGN, "=", line);
-  case '!':
-    if (pos < input.size() && input[pos] == '=')
-    {
-      pos++;
-      return Token(TokenType::NEQ, "!=", line);
+
+    auto it = keywords.find(identStr);
+    if (it != keywords.end()) {
+        return Token(it->second, tokenLine);
     }
-    return Token(TokenType::NOT, "!", line);
-  case '+':
-    return Token(TokenType::PLUS, "+", line);
-  case '-':
-    return Token(TokenType::MINU, "-", line);
-  case '*':
-    return Token(TokenType::MULT, "*", line);
-  case '/':
-    // 逆天，还要考虑注释
-    return Token(TokenType::DIV, "/", line);
-  case '%':
-    return Token(TokenType::MOD, "%", line);
-  case '[':
-    return Token(TokenType::LBRACK, "[", line);
-  case ']':
-    return Token(TokenType::RBRACK, "]", line);
-  case '{':
-    return Token(TokenType::LBRACE, "{", line);
-  case '}':
-    return Token(TokenType::RBRACE, "}", line);
-  case ';':
-    return Token(TokenType::SEMICN, ";", line);
-  case ',':
-    return Token(TokenType::COMMA, ",", line);
-  case '(':
-    return Token(TokenType::LPARENT, "(", line);
-  case ')':
-    return Token(TokenType::RPARENT, ")", line);
-  default:
-    return Token(TokenType::ERROR, std::string(1, current), line);
-  }
+    return Token(TokenType::IDENTIFIER, identStr, tokenLine);
+}
+
+Token Lexer::number() {
+    std::string numStr;
+    int tokenLine = line;
+    numStr += currentChar();
+    advance();
+
+    while (std::isdigit(currentChar())) {
+        numStr += currentChar();
+        advance();
+    }
+    return Token(TokenType::INT_CONST, std::stoi(numStr), tokenLine);
+}
+
+Token Lexer::formatString() {
+    std::string strVal;
+    int tokenLine = line; 
+    advance(); // Consume opening "
+
+    while (true) {
+        char c = currentChar();
+        if (c == '"') { 
+            advance(); 
+            break;
+        }
+        if (c == '\0' || c == '\n') { 
+            std::cerr << "Error: Unterminated or invalid (contains newline) string literal at line " << tokenLine << std::endl;
+            return Token(TokenType::UNKNOWN, strVal, tokenLine); 
+        }
+
+        if (c == '\\') { 
+            advance(); 
+            char escaped_char = currentChar();
+            if (escaped_char == 'n') {
+                strVal += '\n'; 
+                advance();
+            } else {
+                std::cerr << "Error: Invalid escape sequence '\\" << escaped_char << "' in string literal at line " << tokenLine << std::endl;
+                strVal += '\\'; 
+                strVal += escaped_char;
+                advance();
+            }
+        } else {
+            strVal += c;
+            advance();
+        }
+    }
+    return Token(TokenType::FORMAT_STRING, strVal, tokenLine);
+}
+
+Token Lexer::getNextToken() {
+    while (true) { 
+        skipWhitespace(); 
+        int tokenLine = line; 
+        char c = currentChar();
+
+        if (c == '\0' && currentLineContent.empty() && (sourceFile.eof() || !sourceFile.is_open() || sourceFile.bad())) {
+            return Token(TokenType::END_OF_FILE, tokenLine);
+        }
+        if (c == '\0') { // Catch-all for unexpected EOF or error states
+             if (currentLineContent.empty() && (sourceFile.eof() || !sourceFile.is_open() || sourceFile.bad())) {
+                 return Token(TokenType::END_OF_FILE, tokenLine);
+             }
+        }
+
+        if (c == '/') {
+            char next_c = (column + 1 < currentLineContent.length()) ? currentLineContent[column+1] : '\0';
+            if (next_c == '/') { 
+                advance(); 
+                advance(); 
+                consumeSingleLineComment();
+                continue; 
+            } else if (next_c == '*') { 
+                advance(); 
+                advance(); 
+                consumeMultiLineComment();
+                continue; 
+            }
+        }
+        
+        if (std::isalpha(c) || c == '_') {
+            return identifier(); 
+        }
+
+        if (std::isdigit(c)) {
+            return number(); 
+        }
+
+        if (c == '"') {
+            return formatString(); 
+        }
+
+        advance(); 
+        switch (c) {
+            case '+': return Token(TokenType::OP_PLUS, tokenLine);
+            case '-': return Token(TokenType::OP_MINUS, tokenLine);
+            case '*': return Token(TokenType::OP_MULTIPLY, tokenLine);
+            case '/': return Token(TokenType::OP_DIVIDE, tokenLine); 
+            case '%': return Token(TokenType::OP_MODULO, tokenLine);
+            case '=':
+                if (currentChar() == '=') {
+                    advance(); return Token(TokenType::OP_EQ, tokenLine);
+                }
+                return Token(TokenType::OP_ASSIGN, tokenLine);
+            case '!':
+                if (currentChar() == '=') {
+                    advance(); return Token(TokenType::OP_NEQ, tokenLine);
+                }
+                return Token(TokenType::OP_NOT, tokenLine);
+            case '<':
+                if (currentChar() == '=') {
+                    advance(); return Token(TokenType::OP_LTE, tokenLine);
+                }
+                return Token(TokenType::OP_LT, tokenLine);
+            case '>':
+                if (currentChar() == '=') {
+                    advance(); return Token(TokenType::OP_GTE, tokenLine);
+                }
+                return Token(TokenType::OP_GT, tokenLine);
+            case '&':
+                if (currentChar() == '&') {
+                    advance(); return Token(TokenType::OP_AND, tokenLine);
+                }
+                return Token(TokenType::UNKNOWN, std::string(1, c), tokenLine);
+            case '|':
+                if (currentChar() == '|') {
+                    advance(); return Token(TokenType::OP_OR, tokenLine);
+                }
+                return Token(TokenType::UNKNOWN, std::string(1, c), tokenLine);
+            case ';': return Token(TokenType::PUNC_SEMICOLON, tokenLine);
+            case ',': return Token(TokenType::PUNC_COMMA, tokenLine);
+            case '(': return Token(TokenType::PUNC_LPAREN, tokenLine);
+            case ')': return Token(TokenType::PUNC_RPAREN, tokenLine);
+            case '[': return Token(TokenType::PUNC_LBRACKET, tokenLine);
+            case ']': return Token(TokenType::PUNC_RBRACKET, tokenLine);
+            case '{': return Token(TokenType::PUNC_LBRACE, tokenLine);
+            case '}': return Token(TokenType::PUNC_RBRACE, tokenLine);
+            default:
+                if (c == '\0') return Token(TokenType::END_OF_FILE, tokenLine); // Should be caught earlier
+                return Token(TokenType::UNKNOWN, std::string(1, c), tokenLine);
+        }
+    }
+}
+
+std::vector<Token> Lexer::getAllTokens() {
+    std::vector<Token> tokens;
+    if (!sourceFile.is_open() || sourceFile.bad()) { 
+        std::cerr << "Lexer Error: Source file is not open or in a bad state." << std::endl;
+        tokens.push_back(Token(TokenType::END_OF_FILE, line)); 
+        return tokens;
+    }
+    while (true) {
+        Token token = getNextToken();
+        tokens.push_back(token);
+        if (token.type == TokenType::END_OF_FILE) {
+            break;
+        }
+        if (token.type == TokenType::UNKNOWN) {
+             if (std::holds_alternative<std::string>(token.value)) {
+                std::cerr << "Lexer Warning: Unknown token '" << std::get<std::string>(token.value)
+                          << "' at line " << token.line << std::endl;
+            } else {
+                 std::cerr << "Lexer Warning: Unknown token (type: " << static_cast<int>(token.type) 
+                           << ") at line " << token.line << std::endl;
+            }
+        }
+    }
+    return tokens;
 }

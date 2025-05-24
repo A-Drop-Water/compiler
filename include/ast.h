@@ -1,488 +1,348 @@
 #ifndef AST_H
 #define AST_H
 
-#include "token.h" // For TokenType, Token value
-#include <vector>
 #include <string>
-#include <memory>   // For std::unique_ptr
-#include <iostream> // For printing
-#include <algorithm> // For std::any_of, std::all_of if needed
+#include <vector>
+#include <memory> // For std::unique_ptr
+#include <iostream> // For std::ostream
+#include "token.h" // For TokenType, and potentially to store token info
 
-// Forward declarations for mutual recursion if any (not strictly needed with unique_ptr to base)
+// Forward declarations for node types if they reference each other
 struct ExpNode;
 struct StmtNode;
 struct DeclNode;
-struct BlockItemNode; // For items in a block (Decl or Stmt)
-struct InitValNode;   // Forward declaration
+struct BlockItemNode; // Can be DeclNode or StmtNode
+struct ConstExpNode;
+struct InitValNode;
+struct ConstInitValNode;
 
-// --- Helper for printing indentation ---
-inline void printIndent(std::ostream& out, int indent) {
-    for (int i = 0; i < indent; ++i) out << "  ";
-}
-
-// --- Base AST Node ---
-struct AstNode {
-    size_t lineNumber; // Line number for error reporting and debugging
-    AstNode(size_t line = 0) : lineNumber(line) {}
-    virtual ~AstNode() = default;
-    virtual void print(std::ostream& out, int indent = 0) const = 0;
+// Enum for binary operator types (as an example, can be expanded)
+enum class BinOpType {
+    ADD, SUB, MUL, DIV, MOD,
+    EQ, NEQ, LT, GT, LTE, GTE,
+    AND, OR
+    // Add other binary operators as needed
 };
 
-// --- Expressions ---
-struct ExpNode : public AstNode {
-    ExpNode(size_t line = 0) : AstNode(line) {}
+// Enum for unary operator types
+enum class UnaryOpType {
+    PLUS, MINUS, NOT
+};
+
+// Base class for all AST nodes
+struct AstNode {
+    virtual ~AstNode() = default;
+    // Optionally, add a virtual method for an AST visitor pattern later
+    // virtual void accept(class AstVisitor& visitor) = 0;
+    // Store line number for error reporting
+    int lineNumber = 0; 
+    AstNode(int line = 0) : lineNumber(line) {}
+
+    virtual void print(std::ostream& out, int indentLevel = 0) const {
+        for (int i = 0; i < indentLevel; ++i) out << "  ";
+        out << "AstNode (line " << lineNumber << ")\n";
+    }
+};
+
+// Expressions
+struct ExpNode : public AstNode { 
+    ExpNode(int line = 0) : AstNode(line) {} 
 };
 
 struct NumberNode : public ExpNode {
-    std::string value;
-    NumberNode(const Token& t) : ExpNode(t.line), value(t.value) {}
-    void print(std::ostream& out, int indent) const override {
-        printIndent(out, indent);
-        out << "NumberNode: " << value << " (Line: " << lineNumber << ")" << std::endl;
+    int value;
+    NumberNode(int val, int line) : ExpNode(line), value(val) {}
+    void print(std::ostream& out, int indentLevel = 0) const override {
+        for (int i = 0; i < indentLevel; ++i) out << "  ";
+        out << "NumberNode (value: " << value << ", line: " << lineNumber << ")\n";
     }
 };
 
 struct LValNode : public ExpNode {
-    std::string identName;
-    std::vector<std::unique_ptr<ExpNode>> arrayIndices;
-    LValNode(const Token& idToken) : ExpNode(idToken.line), identName(idToken.value) {}
-    void print(std::ostream& out, int indent) const override {
-        printIndent(out, indent);
-        out << "LValNode: " << identName << " (Line: " << lineNumber << ")" << std::endl;
-        for (const auto& index : arrayIndices) {
-            printIndent(out, indent + 1);
-            out << "Index:" << std::endl;
-            index->print(out, indent + 2);
+    std::string ident;
+    std::unique_ptr<ExpNode> index; // Null if not an array access
+    LValNode(std::string id, int line, std::unique_ptr<ExpNode> idx = nullptr) 
+        : ExpNode(line), ident(id), index(std::move(idx)) {}
+    void print(std::ostream& out, int indentLevel = 0) const override {
+        for (int i = 0; i < indentLevel; ++i) out << "  ";
+        out << "LValNode (ident: " << ident << ", line: " << lineNumber << ")\n";
+        if (index) {
+            for (int i = 0; i < indentLevel + 1; ++i) out << "  ";
+            out << "Index:\n";
+            index->print(out, indentLevel + 2);
         }
     }
 };
 
 struct BinaryExpNode : public ExpNode {
+    BinOpType op;
     std::unique_ptr<ExpNode> left;
-    TokenType opType;
-    std::string opString;
     std::unique_ptr<ExpNode> right;
-
-    BinaryExpNode(std::unique_ptr<ExpNode> l, const Token& opToken, std::unique_ptr<ExpNode> r)
-        : ExpNode(opToken.line), left(std::move(l)), opType(opToken.type), opString(opToken.value), right(std::move(r)) {}
-
-    void print(std::ostream& out, int indent) const override {
-        printIndent(out, indent);
-        out << "BinaryExpNode: Op=" << opString << " (Line: " << lineNumber << ")" << std::endl;
-        printIndent(out, indent + 1); out << "Left:" << std::endl;
-        left->print(out, indent + 2);
-        printIndent(out, indent + 1); out << "Right:" << std::endl;
-        right->print(out, indent + 2);
+    BinaryExpNode(BinOpType o, std::unique_ptr<ExpNode> l, std::unique_ptr<ExpNode> r, int line)
+        : ExpNode(line), op(o), left(std::move(l)), right(std::move(r)) {}
+    void print(std::ostream& out, int indentLevel = 0) const override {
+        for (int i = 0; i < indentLevel; ++i) out << "  ";
+        // TODO: Convert BinOpType to string for printing if possible, or just print enum int value
+        out << "BinaryExpNode (op: " << static_cast<int>(op) << ", line: " << lineNumber << ")\n";
+        if (left) left->print(out, indentLevel + 1);
+        else {
+            for (int i = 0; i < indentLevel + 1; ++i) out << "  ";
+            out << "Left: (null)\n";
+        }
+        if (right) right->print(out, indentLevel + 1);
+        else {
+            for (int i = 0; i < indentLevel + 1; ++i) out << "  ";
+            out << "Right: (null)\n";
+        }
     }
 };
 
 struct UnaryExpNode : public ExpNode {
-    TokenType opType;
-    std::string opString;
+    UnaryOpType op;
     std::unique_ptr<ExpNode> operand;
-
-    UnaryExpNode(const Token& opToken, std::unique_ptr<ExpNode> exp)
-        : ExpNode(opToken.line), opType(opToken.type), opString(opToken.value), operand(std::move(exp)) {}
-
-    void print(std::ostream& out, int indent) const override {
-        printIndent(out, indent);
-        out << "UnaryExpNode: Op=" << opString << " (Line: " << lineNumber << ")" << std::endl;
-        printIndent(out, indent + 1); out << "Operand:" << std::endl;
-        operand->print(out, indent + 2);
-    }
+    // For function calls, op can be a special value or handled by a different node type
+    UnaryExpNode(UnaryOpType o, std::unique_ptr<ExpNode> oper, int line)
+        : ExpNode(line), op(o), operand(std::move(oper)) {}
 };
 
 struct FuncCallNode : public ExpNode {
-    std::string funcName;
+    std::string funcIdent;
     std::vector<std::unique_ptr<ExpNode>> args;
-    FuncCallNode(const Token& funcIdToken) : ExpNode(funcIdToken.line), funcName(funcIdToken.value) {}
-    void print(std::ostream& out, int indent) const override {
-        printIndent(out, indent);
-        out << "FuncCallNode: " << funcName << " (Line: " << lineNumber << ")" << std::endl;
-        for (size_t i = 0; i < args.size(); ++i) {
-            printIndent(out, indent + 1);
-            out << "Arg " << i + 1 << ":" << std::endl;
-            args[i]->print(out, indent + 2);
+    FuncCallNode(std::string id, std::vector<std::unique_ptr<ExpNode>> a, int line)
+        : ExpNode(line), funcIdent(id), args(std::move(a)) {}
+};
+
+// Constant Expressions (subset of ExpNode, evaluated at compile time)
+struct ConstExpNode : public AstNode { // May evaluate to an int
+    std::unique_ptr<ExpNode> exp; // The actual expression
+    ConstExpNode(std::unique_ptr<ExpNode> e, int line) : AstNode(line), exp(std::move(e)) {}
+};
+
+
+// Initial Values
+struct InitValNode : public AstNode {
+    std::vector<std::unique_ptr<InitValNode>> elements; // For array initialization
+    std::unique_ptr<ExpNode> singleExp; // For single expression initialization
+
+    InitValNode(std::unique_ptr<ExpNode> sExp, int line) : AstNode(line), singleExp(std::move(sExp)) {}
+    InitValNode(std::vector<std::unique_ptr<InitValNode>> elems, int line) : AstNode(line), elements(std::move(elems)) {}
+};
+
+struct ConstInitValNode : public AstNode {
+    std::vector<std::unique_ptr<ConstInitValNode>> elements; // For array initialization
+    std::unique_ptr<ConstExpNode> singleConstExp; // For single const expression
+
+    ConstInitValNode(std::unique_ptr<ConstExpNode> sConstExp, int line) : AstNode(line), singleConstExp(std::move(sConstExp)) {}
+    ConstInitValNode(std::vector<std::unique_ptr<ConstInitValNode>> elems, int line) : AstNode(line), elements(std::move(elems)) {}
+};
+
+
+// Declarations
+struct DeclNode : public AstNode { 
+    DeclNode(int line = 0) : AstNode(line) {}
+};
+
+struct VarDefNode : public AstNode {
+    std::string ident;
+    std::vector<std::unique_ptr<ConstExpNode>> arrayDimensions; // Empty if not an array
+    std::unique_ptr<InitValNode> initVal; // Null if no initializer
+    
+    VarDefNode(std::string id, int line, std::unique_ptr<InitValNode> init = nullptr) 
+        : AstNode(line), ident(id), initVal(std::move(init)) {}
+    
+    VarDefNode(std::string id, std::vector<std::unique_ptr<ConstExpNode>> dims, int line, std::unique_ptr<InitValNode> init = nullptr)
+        : AstNode(line), ident(id), arrayDimensions(std::move(dims)), initVal(std::move(init)) {}
+};
+
+struct VarDeclNode : public DeclNode {
+    // BType is implicitly 'int' based on grammar
+    std::vector<std::unique_ptr<VarDefNode>> varDefs;
+    VarDeclNode(std::vector<std::unique_ptr<VarDefNode>> defs, int line) : DeclNode(line), varDefs(std::move(defs)) {}
+};
+
+struct ConstDefNode : public AstNode {
+    std::string ident;
+    std::vector<std::unique_ptr<ConstExpNode>> arrayDimensions; // Empty if not an array
+    std::unique_ptr<ConstInitValNode> constInitVal;
+    
+    ConstDefNode(std::string id, std::unique_ptr<ConstInitValNode> val, int line)
+        : AstNode(line), ident(id), constInitVal(std::move(val)) {}
+
+    ConstDefNode(std::string id, std::vector<std::unique_ptr<ConstExpNode>> dims, std::unique_ptr<ConstInitValNode> val, int line)
+        : AstNode(line), ident(id), arrayDimensions(std::move(dims)), constInitVal(std::move(val)) {}
+};
+
+struct ConstDeclNode : public DeclNode {
+    // BType is implicitly 'int'
+    std::vector<std::unique_ptr<ConstDefNode>> constDefs;
+    ConstDeclNode(std::vector<std::unique_ptr<ConstDefNode>> defs, int line) : DeclNode(line), constDefs(std::move(defs)) {}
+};
+
+
+// Statements
+struct StmtNode : public AstNode { 
+    StmtNode(int line = 0) : AstNode(line) {}
+};
+
+struct BlockNode : public StmtNode { // Also used for function bodies
+    std::vector<std::unique_ptr<BlockItemNode>> items;
+    BlockNode(std::vector<std::unique_ptr<BlockItemNode>> i, int line) : StmtNode(line), items(std::move(i)) {}
+    void print(std::ostream& out, int indentLevel = 0) const override {
+        for (int i = 0; i < indentLevel; ++i) out << "  ";
+        out << "BlockNode (line: " << lineNumber << ")\n";
+        for (const auto& item : items) {
+            if (item) item->print(out, indentLevel + 1);
         }
     }
 };
 
-// --- Statements ---
-struct StmtNode : public AstNode {
-     StmtNode(size_t line = 0) : AstNode(line) {}
+// BlockItem can be a Decl or a Stmt. Using a wrapper or std::variant if C++17 is available.
+// For simplicity with unique_ptr, we might need separate vectors or a base BlockItemNode.
+struct BlockItemNode : public AstNode {
+    std::unique_ptr<DeclNode> decl;
+    std::unique_ptr<StmtNode> stmt;
+
+    BlockItemNode(std::unique_ptr<DeclNode> d, int line) : AstNode(line), decl(std::move(d)), stmt(nullptr) {}
+    BlockItemNode(std::unique_ptr<StmtNode> s, int line) : AstNode(line), decl(nullptr), stmt(std::move(s)) {}
 };
+
 
 struct AssignStmtNode : public StmtNode {
     std::unique_ptr<LValNode> lval;
-    std::unique_ptr<ExpNode> rhs; // For regular assignment
-    bool isGetintCall = false;    // True if LVal = getint()
-
-    AssignStmtNode(std::unique_ptr<LValNode> lv, std::unique_ptr<ExpNode> r, size_t line)
-        : StmtNode(line), lval(std::move(lv)), rhs(std::move(r)), isGetintCall(false) {}
-    // Constructor for getint
-    AssignStmtNode(std::unique_ptr<LValNode> lv, size_t line)
-        : StmtNode(line), lval(std::move(lv)), rhs(nullptr), isGetintCall(true) {}
-
-    void print(std::ostream& out, int indent) const override {
-        printIndent(out, indent);
-        out << "AssignStmtNode" << (isGetintCall ? " (getint)" : "") << " (Line: " << lineNumber << ")" << std::endl;
-        printIndent(out, indent + 1); out << "LVal:" << std::endl;
-        lval->print(out, indent + 2);
-        if (rhs) {
-            printIndent(out, indent + 1); out << "RHS:" << std::endl;
-            rhs->print(out, indent + 2);
-        }
-    }
+    std::unique_ptr<ExpNode> exp; // Can be regular Exp or GetIntExp
+    AssignStmtNode(std::unique_ptr<LValNode> lv, std::unique_ptr<ExpNode> e, int line)
+        : StmtNode(line), lval(std::move(lv)), exp(std::move(e)) {}
 };
+
+// For LVal = getint(); we can make GetIntNode a type of ExpNode
+struct GetIntNode : public ExpNode {
+    GetIntNode(int line) : ExpNode(line) {}
+};
+
 
 struct ExpStmtNode : public StmtNode {
-    std::unique_ptr<ExpNode> expression; // Can be nullptr for an empty statement (just ';')
-    ExpStmtNode(std::unique_ptr<ExpNode> exp, size_t line) : StmtNode(line), expression(std::move(exp)) {}
-    void print(std::ostream& out, int indent) const override {
-        printIndent(out, indent);
-        out << "ExpStmtNode" << (expression ? "" : " (Empty)") << " (Line: " << lineNumber << ")" << std::endl;
-        if (expression) {
-            expression->print(out, indent + 1);
-        }
-    }
-};
-
-struct BlockItemNode : public AstNode { // Common base for Decl and Stmt in a block
-    BlockItemNode(size_t line = 0) : AstNode(line) {}
-};
-
-
-struct BlockNode : public StmtNode { // Block can also be a statement
-    std::vector<std::unique_ptr<BlockItemNode>> items;
-    BlockNode(size_t line = 0) : StmtNode(line) {}
-    void print(std::ostream& out, int indent) const override {
-        printIndent(out, indent);
-        out << "BlockNode (Line: " << lineNumber << ")" << std::endl;
-        for (const auto& item : items) {
-            item->print(out, indent + 1);
-        }
-    }
+    std::unique_ptr<ExpNode> exp; // Can be null for empty statement ';'
+    ExpStmtNode(int line, std::unique_ptr<ExpNode> e = nullptr) : StmtNode(line), exp(std::move(e)) {}
 };
 
 struct IfStmtNode : public StmtNode {
-    std::unique_ptr<ExpNode> condition; // Cond
+    std::unique_ptr<ExpNode> condition; // Cond -> LOrExp
     std::unique_ptr<StmtNode> thenStmt;
-    std::unique_ptr<StmtNode> elseStmt; // Can be nullptr
-    IfStmtNode(std::unique_ptr<ExpNode> cond, std::unique_ptr<StmtNode> thenS, std::unique_ptr<StmtNode> elseS, size_t line)
+    std::unique_ptr<StmtNode> elseStmt; // Can be null
+    IfStmtNode(std::unique_ptr<ExpNode> cond, std::unique_ptr<StmtNode> thenS, int line, std::unique_ptr<StmtNode> elseS = nullptr)
         : StmtNode(line), condition(std::move(cond)), thenStmt(std::move(thenS)), elseStmt(std::move(elseS)) {}
-    void print(std::ostream& out, int indent) const override {
-        printIndent(out, indent);
-        out << "IfStmtNode (Line: " << lineNumber << ")" << std::endl;
-        printIndent(out, indent + 1); out << "Condition:" << std::endl;
-        condition->print(out, indent + 2);
-        printIndent(out, indent + 1); out << "Then:" << std::endl;
-        thenStmt->print(out, indent + 2);
-        if (elseStmt) {
-            printIndent(out, indent + 1); out << "Else:" << std::endl;
-            elseStmt->print(out, indent + 2);
-        }
-    }
 };
 
 struct WhileStmtNode : public StmtNode {
-    std::unique_ptr<ExpNode> condition; // Cond
+    std::unique_ptr<ExpNode> condition; // Cond -> LOrExp
     std::unique_ptr<StmtNode> body;
-    WhileStmtNode(std::unique_ptr<ExpNode> cond, std::unique_ptr<StmtNode> b, size_t line)
+    WhileStmtNode(std::unique_ptr<ExpNode> cond, std::unique_ptr<StmtNode> b, int line)
         : StmtNode(line), condition(std::move(cond)), body(std::move(b)) {}
-    void print(std::ostream& out, int indent) const override {
-        printIndent(out, indent);
-        out << "WhileStmtNode (Line: " << lineNumber << ")" << std::endl;
-        printIndent(out, indent + 1); out << "Condition:" << std::endl;
-        condition->print(out, indent + 2);
-        printIndent(out, indent + 1); out << "Body:" << std::endl;
-        body->print(out, indent + 2);
-    }
 };
 
-struct BreakStmtNode : public StmtNode {
-    BreakStmtNode(size_t line) : StmtNode(line) {}
-    void print(std::ostream& out, int indent) const override {
-        printIndent(out, indent);
-        out << "BreakStmtNode (Line: " << lineNumber << ")" << std::endl;
-    }
+struct BreakStmtNode : public StmtNode { 
+    BreakStmtNode(int line) : StmtNode(line) {} 
 };
-
-struct ContinueStmtNode : public StmtNode {
-    ContinueStmtNode(size_t line) : StmtNode(line) {}
-    void print(std::ostream& out, int indent) const override {
-        printIndent(out, indent);
-        out << "ContinueStmtNode (Line: " << lineNumber << ")" << std::endl;
-    }
+struct ContinueStmtNode : public StmtNode { 
+    ContinueStmtNode(int line) : StmtNode(line) {} 
 };
 
 struct ReturnStmtNode : public StmtNode {
-    std::unique_ptr<ExpNode> returnValue; // Can be nullptr for 'return;'
-    ReturnStmtNode(std::unique_ptr<ExpNode> val, size_t line) : StmtNode(line), returnValue(std::move(val)) {}
-     void print(std::ostream& out, int indent) const override {
-        printIndent(out, indent);
-        out << "ReturnStmtNode" << (returnValue ? "" : " (void)") << " (Line: " << lineNumber << ")" << std::endl;
-        if (returnValue) {
-            returnValue->print(out, indent + 1);
+    std::unique_ptr<ExpNode> returnExp; // Can be null for 'return;' in void function
+    ReturnStmtNode(int line, std::unique_ptr<ExpNode> retExp = nullptr) : StmtNode(line), returnExp(std::move(retExp)) {}
+    void print(std::ostream& out, int indentLevel = 0) const override {
+        for (int i = 0; i < indentLevel; ++i) out << "  ";
+        out << "ReturnStmtNode (line: " << lineNumber << ")\n";
+        if (returnExp) returnExp->print(out, indentLevel + 1);
+        else {
+            for (int i = 0; i < indentLevel+1; ++i) out << "  ";
+            out << "(No return expression)\n";
         }
-    }
-};
-
-struct FormatStringNode : public AstNode {
-    std::string value; // The literal string, e.g., "\"Hello %d\\n\""
-    FormatStringNode(const Token& t) : AstNode(t.line), value(t.value) {}
-     void print(std::ostream& out, int indent) const override {
-        printIndent(out, indent);
-        out << "FormatStringNode: " << value << " (Line: " << lineNumber << ")" << std::endl;
     }
 };
 
 struct PrintfStmtNode : public StmtNode {
-    std::unique_ptr<FormatStringNode> formatString;
+    std::string formatString; // The raw format string token value
     std::vector<std::unique_ptr<ExpNode>> args;
-    PrintfStmtNode(std::unique_ptr<FormatStringNode> fs, size_t line) : StmtNode(line), formatString(std::move(fs)) {}
-    void print(std::ostream& out, int indent) const override {
-        printIndent(out, indent);
-        out << "PrintfStmtNode (Line: " << lineNumber << ")" << std::endl;
-        formatString->print(out, indent + 1);
-        for (size_t i = 0; i < args.size(); ++i) {
-            printIndent(out, indent + 1);
-            out << "Arg " << i + 1 << ":" << std::endl;
-            args[i]->print(out, indent + 2);
-        }
-    }
-};
-
-// --- Declarations ---
-struct DeclNode : public BlockItemNode { // Base for ConstDecl, VarDecl; also a BlockItem
-    DeclNode(size_t line = 0) : BlockItemNode(line) {}
-};
-
-struct BTypeNode : public AstNode {
-    // In this grammar, BType is always 'int'.
-    // Could store TokenType::INTTK if needed, or just imply 'int'.
-    BTypeNode(size_t line) : AstNode(line) {}
-    void print(std::ostream& out, int indent) const override {
-        printIndent(out, indent);
-        out << "BTypeNode: int (Line: " << lineNumber << ")" << std::endl;
-    }
-};
-
-// ConstInitVal: ConstExp | '{' [ConstInitVal {',' ConstInitVal}] '}'
-struct ConstInitValNode : public AstNode {
-    std::unique_ptr<ExpNode> singleValue; // If not aggregate
-    std::vector<std::unique_ptr<ConstInitValNode>> aggregateValues; // If aggregate
-    bool isAggregate;
-
-    ConstInitValNode(std::unique_ptr<ExpNode> val, size_t line)
-        : AstNode(line), singleValue(std::move(val)), isAggregate(false) {}
-    ConstInitValNode(std::vector<std::unique_ptr<ConstInitValNode>> vals, size_t line)
-        : AstNode(line), singleValue(nullptr), aggregateValues(std::move(vals)), isAggregate(true) {}
-    // Constructor for empty aggregate {}
-    ConstInitValNode(size_t line) : AstNode(line), singleValue(nullptr), isAggregate(true) {}
-
-
-    void print(std::ostream& out, int indent) const override {
-        printIndent(out, indent);
-        out << "ConstInitValNode" << (isAggregate ? " (Aggregate)" : "") << " (Line: " << lineNumber << ")" << std::endl;
-        if (singleValue) {
-            singleValue->print(out, indent + 1);
-        }
-        for (const auto& val : aggregateValues) {
-            val->print(out, indent + 1);
-        }
-    }
-};
-
-struct ConstDefNode : public AstNode {
-    std::string identName;
-    std::vector<std::unique_ptr<ExpNode>> arrayDimensions; // ConstExp for array sizes
-    std::unique_ptr<ConstInitValNode> initVal;
-    ConstDefNode(const Token& idToken) : AstNode(idToken.line), identName(idToken.value) {}
-    void print(std::ostream& out, int indent) const override {
-        printIndent(out, indent);
-        out << "ConstDefNode: " << identName << " (Line: " << lineNumber << ")" << std::endl;
-        for (const auto& dim : arrayDimensions) {
-            printIndent(out, indent + 1); out << "Dimension:" << std::endl;
-            dim->print(out, indent + 2);
-        }
-        if (initVal) { // initVal is mandatory for ConstDef
-             printIndent(out, indent + 1); out << "InitVal:" << std::endl;
-            initVal->print(out, indent + 2);
-        }
-    }
-};
-
-struct ConstDeclNode : public DeclNode {
-    std::unique_ptr<BTypeNode> type; // 'const' BType ...
-    std::vector<std::unique_ptr<ConstDefNode>> constDefs;
-    ConstDeclNode(std::unique_ptr<BTypeNode> bt, size_t line) : DeclNode(line), type(std::move(bt)) {}
-    void print(std::ostream& out, int indent) const override {
-        printIndent(out, indent);
-        out << "ConstDeclNode (Line: " << lineNumber << ")" << std::endl;
-        type->print(out, indent + 1);
-        for (const auto& def : constDefs) {
-            def->print(out, indent + 1);
-        }
-    }
-};
-
-// InitVal: Exp | '{' [InitVal {',' InitVal}] '}'
-struct InitValNode : public AstNode {
-    std::unique_ptr<ExpNode> singleValue;
-    std::vector<std::unique_ptr<InitValNode>> aggregateValues;
-    bool isAggregate;
-
-    InitValNode(std::unique_ptr<ExpNode> val, size_t line)
-        : AstNode(line), singleValue(std::move(val)), isAggregate(false) {}
-    InitValNode(std::vector<std::unique_ptr<InitValNode>> vals, size_t line)
-        : AstNode(line), singleValue(nullptr), aggregateValues(std::move(vals)), isAggregate(true) {}
-    // Constructor for empty aggregate {}
-    InitValNode(size_t line) : AstNode(line), singleValue(nullptr), isAggregate(true) {}
-
-    void print(std::ostream& out, int indent) const override {
-        printIndent(out, indent);
-        out << "InitValNode" << (isAggregate ? " (Aggregate)" : "") << " (Line: " << lineNumber << ")" << std::endl;
-        if (singleValue) {
-            singleValue->print(out, indent + 1);
-        }
-        for (const auto& val : aggregateValues) {
-            val->print(out, indent + 1);
-        }
-    }
+    PrintfStmtNode(std::string fmt, std::vector<std::unique_ptr<ExpNode>> a, int line)
+        : StmtNode(line), formatString(fmt), args(std::move(a)) {}
 };
 
 
-struct VarDefNode : public AstNode {
-    std::string identName;
-    std::vector<std::unique_ptr<ExpNode>> arrayDimensions; // ConstExp for array sizes
-    std::unique_ptr<InitValNode> initVal; // Optional
-    VarDefNode(const Token& idToken) : AstNode(idToken.line), identName(idToken.value) {}
-    void print(std::ostream& out, int indent) const override {
-        printIndent(out, indent);
-        out << "VarDefNode: " << identName << " (Line: " << lineNumber << ")" << std::endl;
-        for (const auto& dim : arrayDimensions) {
-            printIndent(out, indent + 1); out << "Dimension:" << std::endl;
-            dim->print(out, indent + 2);
-        }
-        if (initVal) {
-            printIndent(out, indent + 1); out << "InitVal:" << std::endl;
-            initVal->print(out, indent + 2);
-        }
-    }
-};
-
-struct VarDeclNode : public DeclNode {
-    std::unique_ptr<BTypeNode> type;
-    std::vector<std::unique_ptr<VarDefNode>> varDefs;
-    VarDeclNode(std::unique_ptr<BTypeNode> bt, size_t line) : DeclNode(line), type(std::move(bt)) {}
-    void print(std::ostream& out, int indent) const override {
-        printIndent(out, indent);
-        out << "VarDeclNode (Line: " << lineNumber << ")" << std::endl;
-        type->print(out, indent + 1);
-        for (const auto& def : varDefs) {
-            def->print(out, indent + 1);
-        }
-    }
-};
-
-// --- Functions ---
-struct FuncTypeNode : public AstNode {
-    TokenType type; // VOIDTK or INTTK
-    FuncTypeNode(const Token& typeToken) : AstNode(typeToken.line), type(typeToken.type) {}
-    void print(std::ostream& out, int indent) const override {
-        printIndent(out, indent);
-        out << "FuncTypeNode: " << (type == TokenType::VOIDTK ? "void" : "int") << " (Line: " << lineNumber << ")" << std::endl;
-    }
-};
+// Function Definitions
+enum class FuncType { VOID, INT };
 
 struct FuncFParamNode : public AstNode {
-    std::unique_ptr<BTypeNode> type;
-    std::string paramName;
-    bool isArray = false; // True if '[]' is present after Ident
-    std::vector<std::unique_ptr<ExpNode>> arrayPointerDimensions; // For subsequent '[ConstExp]' in C-style `int arr[][10]`
-                                                                // But grammar is `BType Ident ['[' ']' {'[' ConstExp ']'}]`
-                                                                // This means `int p[]` or `int p[][DIM]`
-                                                                // PDF says "只包含普通变量" for FuncFParam.
-                                                                // I will follow the PDF and simplify this. If full array params are needed, this needs adjustment.
-                                                                // For now, assuming simple `BType Ident`.
-    FuncFParamNode(std::unique_ptr<BTypeNode> paramType, const Token& nameToken)
-        : AstNode(nameToken.line), type(std::move(paramType)), paramName(nameToken.value), isArray(false) {}
-
-    // If array parameters were to be fully supported as per the EBNF in parser.h:
-    // FuncFParamNode(std::unique_ptr<BTypeNode> paramType, const Token& nameToken, bool isArr, std::vector<std::unique_ptr<ExpNode>> dims)
-    //     : AstNode(nameToken.line), type(std::move(paramType)), paramName(nameToken.value), isArray(isArr), arrayPointerDimensions(std::move(dims)) {}
-
-
-    void print(std::ostream& out, int indent) const override {
-        printIndent(out, indent);
-        out << "FuncFParamNode: " << paramName << (isArray ? " (Array Param)" : "") << " (Line: " << lineNumber << ")" << std::endl;
-        type->print(out, indent + 1);
-        if (isArray) {
-             for(const auto& dim : arrayPointerDimensions) {
-                printIndent(out, indent + 1); out << "Dim (pointer sense):" << std::endl;
-                dim->print(out, indent + 2);
-             }
-        }
-    }
+    // BType is 'int'
+    std::string ident;
+    // Grammar says `BType Ident`, not array.
+    // bool isArray; // Future extension: for array parameters
+    // std::vector<std::unique_ptr<ConstExpNode>> arrayDimensions; // if isArray is true
+    FuncFParamNode(std::string id, int line) : AstNode(line), ident(id) {}
 };
 
-struct FuncFParamsNode : public AstNode {
+struct FuncDefNode : public AstNode {
+    FuncType funcType;
+    std::string ident;
     std::vector<std::unique_ptr<FuncFParamNode>> params;
-    FuncFParamsNode(size_t line = 0) : AstNode(line) {}
-     void print(std::ostream& out, int indent) const override {
-        printIndent(out, indent);
-        out << "FuncFParamsNode (Line: " << lineNumber << ")" << std::endl;
-        for (const auto& param : params) {
-            param->print(out, indent + 1);
-        }
-    }
-};
-
-struct FuncDefNode : public AstNode { // Also a BlockItem conceptually for CompUnit
-    std::unique_ptr<FuncTypeNode> funcType;
-    std::string funcName;
-    std::unique_ptr<FuncFParamsNode> params; // Can be nullptr if no params
     std::unique_ptr<BlockNode> body;
-    FuncDefNode(std::unique_ptr<FuncTypeNode> ft, const Token& nameToken, 
-                std::unique_ptr<FuncFParamsNode> fps, std::unique_ptr<BlockNode> b)
-        : AstNode(nameToken.line), funcType(std::move(ft)), funcName(nameToken.value), 
-          params(std::move(fps)), body(std::move(b)) {}
-    void print(std::ostream& out, int indent) const override {
-        printIndent(out, indent);
-        out << "FuncDefNode: " << funcName << " (Line: " << lineNumber << ")" << std::endl;
-        funcType->print(out, indent + 1);
-        if (params) {
-            params->print(out, indent + 1);
+    FuncDefNode(FuncType type, std::string id, std::vector<std::unique_ptr<FuncFParamNode>> p, std::unique_ptr<BlockNode> b, int line)
+        : AstNode(line), funcType(type), ident(id), params(std::move(p)), body(std::move(b)) {}
+    void print(std::ostream& out, int indentLevel = 0) const override {
+        for (int i = 0; i < indentLevel; ++i) out << "  ";
+        out << "FuncDefNode (type: " << (funcType == FuncType::INT ? "int" : "void") 
+            << ", ident: " << ident << ", line: " << lineNumber << ")\n";
+        for (int i = 0; i < indentLevel + 1; ++i) out << "  ";
+        out << "Params:\n";
+        for (const auto& param : params) {
+            if (param) param->print(out, indentLevel + 2);
         }
-        body->print(out, indent + 1);
+        if (body) body->print(out, indentLevel + 1);
     }
 };
 
 struct MainFuncDefNode : public AstNode {
-    // Implicitly 'int main()'
+    // Type is 'int', name is 'main', no params
     std::unique_ptr<BlockNode> body;
-    MainFuncDefNode(std::unique_ptr<BlockNode> b, size_t line) : AstNode(line), body(std::move(b)) {}
-     void print(std::ostream& out, int indent) const override {
-        printIndent(out, indent);
-        out << "MainFuncDefNode (int main) (Line: " << lineNumber << ")" << std::endl;
-        body->print(out, indent + 1);
+    MainFuncDefNode(std::unique_ptr<BlockNode> b, int line) : AstNode(line), body(std::move(b)) {}
+    void print(std::ostream& out, int indentLevel = 0) const override {
+        for (int i = 0; i < indentLevel; ++i) out << "  ";
+        out << "MainFuncDefNode (line: " << lineNumber << ")\n";
+        if (body) body->print(out, indentLevel + 1);
     }
 };
 
-// --- Compilation Unit (Root) ---
-// CompUnit: {Decl} {FuncDef} MainFuncDef
+
+// Compilation Unit (Root of AST)
 struct CompUnitNode : public AstNode {
-    std::vector<std::unique_ptr<AstNode>> globalDefinitions; // Decl or FuncDef
-    std::unique_ptr<MainFuncDefNode> mainFunc; // Mandatory
-    CompUnitNode(size_t line = 0) : AstNode(line) {}
-    void print(std::ostream& out, int indent = 0) const override {
-        printIndent(out, indent);
-        out << "CompUnitNode (Line: " << lineNumber << ")" << std::endl;
-        for (const auto& def : globalDefinitions) {
-            def->print(out, indent + 1);
+    std::vector<std::unique_ptr<DeclNode>> globalDecls;
+    std::vector<std::unique_ptr<FuncDefNode>> funcDefs;
+    std::unique_ptr<MainFuncDefNode> mainFuncDef;
+
+    CompUnitNode(std::vector<std::unique_ptr<DeclNode>> decls,
+                 std::vector<std::unique_ptr<FuncDefNode>> funcs,
+                 std::unique_ptr<MainFuncDefNode> mainFunc, int line = 0)
+        : AstNode(line), globalDecls(std::move(decls)), funcDefs(std::move(funcs)), mainFuncDef(std::move(mainFunc)) {}
+    void print(std::ostream& out, int indentLevel = 0) const override {
+        for (int i = 0; i < indentLevel; ++i) out << "  ";
+        out << "CompUnitNode (line: " << lineNumber << ")\n";
+        
+        for (int i = 0; i < indentLevel + 1; ++i) out << "  ";
+        out << "Global Decls:\n";
+        for (const auto& decl : globalDecls) {
+            if (decl) decl->print(out, indentLevel + 2);
         }
-        if (mainFunc) { // Should always be present
-            mainFunc->print(out, indent + 1);
+
+        for (int i = 0; i < indentLevel + 1; ++i) out << "  ";
+        out << "Function Defs:\n";
+        for (const auto& funcDef : funcDefs) {
+            if (funcDef) funcDef->print(out, indentLevel + 2);
+        }
+
+        if (mainFuncDef) {
+            for (int i = 0; i < indentLevel + 1; ++i) out << "  ";
+            out << "Main Function Def:\n";
+            mainFuncDef->print(out, indentLevel + 2);
         }
     }
 };
