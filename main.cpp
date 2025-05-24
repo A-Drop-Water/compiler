@@ -1,52 +1,93 @@
-// In your main.cpp or equivalent
-#include "lexer.h"
-#include "parser.h"
-#include "ast.h" // For AstNode
-#include <fstream>
 #include <iostream>
-#include <string>
-#include <vector> // For std::vector<Token>
-#include <sstream>
-
-std::string readFromFile(const std::string &filename)
-{
-  std::ifstream file(filename);
-  if (!file.is_open())
-  {
-    throw std::runtime_error("Failed to open file: " + filename);
-  }
-  std::stringstream buffer;
-  buffer << file.rdbuf(); // 将文件内容读入字符串流
-  return buffer.str();
-}
+#include <fstream>
+#include <memory> // For std::unique_ptr
+#include "include/lexer.h"
+#include "include/parser.h"
+#include "include/ast.h" // Assuming ast.h includes the print methods
+#include "include/symbol_table.h"
+#include "include/semantic_analyzer.h"
+#include "include/code_generator.h" // New include
 
 int main() {
-    std::string sourceCode = readFromFile("testfile.txt"); // Your source code
-    Lexer lexer(sourceCode);
-    std::vector<Token> tokens = lexer.tokenize();
+    std::cout << "Starting compiler..." << std::endl;
 
-    std::ofstream astOutFile("ast_output.txt");
-    if (!astOutFile) {
-        std::cerr << "Error opening ast_output.txt for writing." << std::endl;
-        return 1;
-    }
+    // Lexer lexer("testfile.txt"); // This instance would be for initial token printing if uncommented
+    // Optional: You can get all tokens and print them for debugging the lexer
+    // std::vector<Token> tokens = lexer.getAllTokens();
+    // std::cout << "Tokens:" << std::endl;
+    // for (const auto& token : tokens) {
+    //     // Assuming Token has a toString() or similar method, or implement one
+    //     // std::cout << token.toString() << std::endl; 
+    // }
+    
+    // For parsing, we need a fresh lexer instance because getAllTokens() consumes the input.
+    Lexer parserLexer("testfile.txt"); // Use a new lexer instance for the parser
+    Parser parser(parserLexer);
 
-    Parser parser(tokens, astOutFile);
+    std::unique_ptr<CompUnitNode> astRoot = nullptr;
     try {
-        std::unique_ptr<CompUnitNode> astRoot = parser.parse();
-        if (astRoot) {
-            astRoot->print(astOutFile, 0); // Print the AST to the file
-            std::cout << "AST successfully generated and printed to ast_output.txt" << std::endl;
-        } else {
-            std::cerr << "Parsing failed to produce an AST." << std::endl;
-        }
+        astRoot = parser.parseCompUnit();
+        std::cout << "Parsing completed successfully." << std::endl;
     } catch (const std::runtime_error& e) {
-        std::cerr << "Parsing Error: " << e.what() << std::endl;
-        // Also print error to astOutFile if desired
-        astOutFile << "Parsing Error: " << e.what() << std::endl;
-        return 1;
+        std::cerr << "Parsing failed: " << e.what() << std::endl;
+        return 1; // Indicate error
     }
 
-    astOutFile.close();
+    if (astRoot) {
+        // Optional AST Printing (as before)
+        // std::cout << "AST generated. Printing AST to ast_output.txt..." << std::endl;
+        // std::ofstream astFile("ast_output.txt");
+        // if (astFile.is_open()) {
+        //     astRoot->print(astFile);
+        //     astFile.close();
+        // } else {
+        //     std::cerr << "Error: Could not open ast_output.txt for writing." << std::endl;
+        // }
+
+        std::cout << "Performing semantic analysis..." << std::endl;
+        SymbolTable symbolTable;
+        SemanticAnalyzer semanticAnalyzer(symbolTable);
+        try {
+            semanticAnalyzer.analyze(astRoot.get());
+            std::cout << "Semantic analysis completed successfully." << std::endl;
+
+            // If reached here, semantic analysis was successful. Proceed to code generation.
+            std::cout << "Performing MIPS code generation..." << std::endl;
+            CodeGenerator codeGenerator(symbolTable); // symbolTable is from outer scope
+            // The generate method might throw its own std::runtime_error for internal issues
+            codeGenerator.generate(astRoot.get(), "mips.txt");
+            std::cout << "MIPS code generation completed successfully. Output to mips.txt" << std::endl;
+
+        } catch (const std::runtime_error& e) {
+            // This will catch errors from either semanticAnalyzer.analyze() or codeGenerator.generate()
+            std::cerr << "Compilation failed: " << e.what() << std::endl;
+            // Optionally, print AST to help debug if semantic analysis fails (already handled in sema part)
+            // If error is from codegen, AST might still be useful.
+            // For simplicity, the error_ast_output is tied to semantic errors in the prompt,
+            // but could be generalized.
+            // If the error was from semantic analysis, error_ast_output.txt might have been created.
+            // If it was from code generation, we might want to print it now if not already.
+            if (dynamic_cast<const std::runtime_error*>(&e) && std::string(e.what()).find("Semantic error occurred") != std::string::npos) {
+                // Semantic error already handled printing error_ast_output.txt if it was configured
+                 std::ofstream errorAstFile("error_ast_output.txt");
+                 if (errorAstFile.is_open()) {
+                     astRoot->print(errorAstFile);
+                     errorAstFile.close();
+                     std::cout << "AST printed to error_ast_output.txt due to semantic error." << std::endl;
+                 }
+            }
+            return 1; // Indicate error
+        }
+        
+    } else {
+        // This part might be less likely if parser throws, but good for safety
+        std::cout << "AST generation failed (root is null), skipping further stages." << std::endl;
+        return 1; 
+    }
+
+    std::cout << "Compiler pipeline finished." << std::endl;
+    // Next step would be MIPS code generation
+    // ...
+
     return 0;
 }
